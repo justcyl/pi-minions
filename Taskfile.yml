@@ -1,0 +1,99 @@
+version: '3'
+
+tasks:
+  up:
+    desc: "Set up development environment (install deps, verify toolchain)"
+    cmds:
+      - |
+        echo "==> Checking Node.js..."
+        if ! command -v node &>/dev/null; then
+          echo "Error: node is required. Install via fnm: https://github.com/Schniz/fnm"
+          exit 1
+        fi
+        echo "  node $(node --version)"
+      - |
+        echo "==> Checking npm..."
+        if ! command -v npm &>/dev/null; then
+          echo "Error: npm is required."
+          exit 1
+        fi
+        echo "  npm $(npm --version)"
+      - |
+        echo "==> Checking pi..."
+        if ! command -v pi &>/dev/null; then
+          echo "Error: pi is required. Install with: npm install -g @mariozechner/pi-coding-agent"
+          exit 1
+        fi
+        echo "  pi $(pi --version 2>/dev/null || echo '(version unavailable)')"
+      - |
+        echo "==> Installing npm dependencies..."
+        npm install
+        echo "  ✓ Dependencies installed"
+      - |
+        echo ""
+        echo "✓ Development environment ready."
+        echo ""
+        echo "  task test        run unit tests"
+        echo "  task typecheck   TypeScript type check"
+        echo "  task dev         load extension into pi"
+        echo "  task test:e2e    smoke test in pi print mode"
+
+  test:
+    desc: "Run unit tests"
+    cmds:
+      - npx vitest run
+
+  test:watch:
+    desc: "Run unit tests in watch mode"
+    cmds:
+      - npx vitest
+
+  test:integration:
+    desc: "Run integration tests (requires pi installed)"
+    cmds:
+      - npx vitest run --reporter=verbose test/**/*.integration.test.ts
+
+  typecheck:
+    desc: "Run TypeScript type checker"
+    cmds:
+      - npx tsc --noEmit
+
+  dev:
+    desc: "Load extension into pi. Open 'task logs' in a second terminal to see debug output."
+    env:
+      PI_MINIONS_DEBUG: "0"
+    cmds:
+      - mkdir -p ./tmp/logs
+      # Rotate: keep last session as .prev so nothing is lost
+      - |
+        if [ -s ./tmp/logs/debug.log ]; then
+          cp ./tmp/logs/debug.log ./tmp/logs/debug.prev.log
+        fi
+      - echo "" > ./tmp/logs/debug.log
+      - |
+        echo ""
+        echo "  ┌─────────────────────────────────────────────┐"
+        echo "  │  pi-minions dev session starting             │"
+        echo "  │  Open a second terminal and run: task logs   │"
+        echo "  │  Log: ./tmp/logs/debug.log                   │"
+        echo "  └─────────────────────────────────────────────┘"
+        echo ""
+      - pi -e ./src/index.ts
+
+  test:e2e:
+    desc: "Smoke test the extension in pi print mode"
+    env:
+      PI_MINIONS_DEBUG: "1"
+    cmds:
+      - mkdir -p ./tmp/logs
+      - pi -e ./src/index.ts -p "List available minion agents"
+      - echo "--- logs ---"
+      - cat ./tmp/logs/debug.log
+
+  logs:
+    desc: "Tail debug log in real time (run in a second terminal alongside 'task dev')"
+    cmds:
+      - mkdir -p ./tmp/logs
+      - touch ./tmp/logs/debug.log
+      - echo "Tailing ./tmp/logs/debug.log  (Ctrl+C to stop)"
+      - tail -f -n 100 ./tmp/logs/debug.log
