@@ -89,124 +89,112 @@ export function makeSpawnHandler(
     tree.add(id, name, parsed.task);
     logger.debug("spawn:cmd", "start", { id, name, task: parsed.task, resolvedModel: config.model, thinking: config.thinking });
 
-    // Shared state for widget rendering
+    // Widget state -- captured in closure, updated from background task
     const taskPreview = parsed.task.length > 60 ? `${parsed.task.slice(0, 60)}…` : parsed.task;
     const activity: Array<{ type: "tool" | "text"; line: string }> = [];
     let runStatus: "running" | "completed" | "failed" = "running";
     let resultLines: string[] = [];
 
-    // Component factory: uses theme colors, re-renders on each updateWidget() call.
-    // Shows the original /spawn command so it's never lost.
-    const renderWidget = (_tui: unknown, theme: { fg: (c: string, t: string) => string; bold: (t: string) => string; dim?: (t: string) => string }) => {
+    const renderWidget = (_tui: unknown, theme: { fg: (c: string, t: string) => string }) => {
       const lines: string[] = [];
-
-      // Header: original command (preserves what the user typed)
       lines.push(theme.fg("dim", "/spawn ") + theme.fg("toolTitle", taskPreview));
-
-      // Status line
       const icon = runStatus === "running" ? "⟳" : runStatus === "completed" ? "✓" : "✗";
       const iconColor = runStatus === "running" ? "muted" : runStatus === "completed" ? "success" : "error";
-      lines.push(
-        theme.fg(iconColor, icon) + " " +
-        theme.fg("accent", name) + theme.fg("dim", ` (${id})`)
-      );
-
+      lines.push(theme.fg(iconColor, icon) + " " + theme.fg("accent", name) + theme.fg("dim", ` (${id})`));
       if (runStatus === "running") {
-        // Live activity: last 5 events
         for (const { type, line } of activity.slice(-5)) {
-          if (type === "tool") {
-            lines.push(theme.fg("muted", "  → ") + theme.fg("toolOutput", line));
-          } else {
-            lines.push(theme.fg("dim", `  ${line}`));
-          }
+          lines.push(type === "tool"
+            ? theme.fg("muted", "  → ") + theme.fg("toolOutput", line)
+            : theme.fg("dim", `  ${line}`));
         }
       } else {
-        // Final result
-        for (const l of resultLines) {
-          lines.push(theme.fg("toolOutput", `  ${l}`));
-        }
+        for (const l of resultLines) lines.push(theme.fg("toolOutput", `  ${l}`));
       }
-
       return new Text(lines.join("\n"), 0, 0);
     };
 
-    const updateWidget = () => {
+    const updateWidget = () =>
       ctx.ui.setWidget(MINIONS_WIDGET, renderWidget as Parameters<typeof ctx.ui.setWidget>[1]);
-    };
 
-    // Show immediately so user sees the command they typed
+    // Show immediately -- user sees their command, handler returns, TUI stays interactive
     updateWidget();
-    ctx.ui.setWorkingMessage(`⟳ ${name} starting…`);
+    ctx.ui.notify(`Spawned ${name} (${id})`, "info");
 
-    const result = await spawnAgent(config, parsed.task, {
-      overrideModel: parsed.model,
-      parentModel,
-      onProcess: (proc) => handles.set(id, proc),
-      onEvent: (e) => {
-        if (e.type === "tool_start") {
-          const line = formatToolCall(e.toolName, e.args);
-          activity.push({ type: "tool", line });
-          ctx.ui.setWorkingMessage(`⟳ ${name} · ${line.slice(0, 50)}`);
-          updateWidget();
+    // Fire and forget -- detach from command handler so the TUI is not blocked.
+    // ctx.ui.setWidget() and pi.sendMessage() are safe to call from background tasks.
+    void (async () => {
+      try {
+        const result = await spawnAgent(config, parsed.task, {
+          overrideModel: parsed.model,
+          parentModel,
+          onProcess: (proc) => handles.set(id, proc),
+          onEvent: (e) => {
+            if (e.type === "tool_start") {
+              activity.push({ type: "tool", line: formatToolCall(e.toolName, e.args) });
+              updateWidget();
+            }
+            if (e.type === "message_end" && e.text) {
+              const preview = e.text.split("\n").filter(Boolean).at(-1) ?? "";
+              if (preview) activity.push({ type: "text", line: preview.slice(0, 80) });
+              updateWidget();
+              const node = tree.get(id);
+              if (node) {
+                tree.updateUsage(id, {
+                  input: node.usage.input + (e.usage.input ?? 0),
+                  output: node.usage.output + (e.usage.output ?? 0),
+                  cacheRead: node.usage.cacheRead + (e.usage.cacheRead ?? 0),
+                  cacheWrite: node.usage.cacheWrite + (e.usage.cacheWrite ?? 0),
+                  cost: node.usage.cost + (e.usage.cost ?? 0),
+                  contextTokens: e.usage.contextTokens ?? 0,
+                  turns: node.usage.turns + 1,
+                });
+              }
+            }
+          },
+        });
+
+        const status = result.exitCode === 0 ? "completed" : "failed";
+        logger.debug("spawn:cmd", status, {
+          id, exitCode: result.exitCode,
+          outputLen: result.finalOutput.length,
+          outputPreview: result.finalOutput.slice(0, 120) || "(empty)",
+          stderr: result.stderr?.slice(0, 200),
+        });
+
+        tree.updateStatus(id, status === "completed" ? "completed" : "failed", result.exitCode, result.error);
+        handles.delete(id);
+
+        // Update widget to final state
+        runStatus = status;
+        const rawLines = result.finalOutput.split("\n").filter(Boolean);
+        resultLines = rawLines.slice(0, 8);
+        if (rawLines.length > 8) resultLines.push(`… ${rawLines.length - 8} more lines`);
+        if (!result.finalOutput) {
+          resultLines = [result.error ? `Error: ${result.error}` : `${status} with no output`];
         }
-        if (e.type === "message_end" && e.text) {
-          const preview = e.text.split("\n").filter(Boolean).at(-1) ?? "";
-          if (preview) activity.push({ type: "text", line: preview.slice(0, 80) });
-          ctx.ui.setWorkingMessage(`⟳ ${name} · thinking…`);
-          updateWidget();
-          // Accumulate usage
-          const node = tree.get(id);
-          if (node) {
-            tree.updateUsage(id, {
-              input: node.usage.input + (e.usage.input ?? 0),
-              output: node.usage.output + (e.usage.output ?? 0),
-              cacheRead: node.usage.cacheRead + (e.usage.cacheRead ?? 0),
-              cacheWrite: node.usage.cacheWrite + (e.usage.cacheWrite ?? 0),
-              cost: node.usage.cost + (e.usage.cost ?? 0),
-              contextTokens: e.usage.contextTokens ?? 0,
-              turns: node.usage.turns + 1,
-            });
-          }
-        }
-      },
-    });
+        updateWidget();
 
-    const status = result.exitCode === 0 ? "completed" : "failed";
-    logger.debug("spawn:cmd", status, {
-      id,
-      exitCode: result.exitCode,
-      outputLen: result.finalOutput.length,
-      outputPreview: result.finalOutput.slice(0, 120) || "(empty)",
-      stderr: result.stderr?.slice(0, 200),
-    });
+        // Inject into LLM context on next turn
+        const contextMsg = result.finalOutput
+          ? `Minion ${name} (${id}) ${status}:\n${result.finalOutput}`
+          : `Minion ${name} (${id}) ${status}.${result.error ? ` Error: ${result.error}` : ""}`;
+        logger.debug("spawn:cmd", "inject-context", { msg: contextMsg.slice(0, 120) });
+        pi.sendMessage(
+          { customType: "minion-result", content: contextMsg, display: false },
+          { deliverAs: "nextTurn" },
+        );
 
-    tree.updateStatus(id, status === "completed" ? "completed" : "failed", result.exitCode, result.error);
-    handles.delete(id);
-    ctx.ui.setWorkingMessage(); // restore default footer
-
-    // Update widget to final state. Persists until before_agent_start clears it.
-    runStatus = status;
-    if (result.finalOutput) {
-      resultLines = result.finalOutput.split("\n").filter(Boolean).slice(0, 8);
-      if (result.finalOutput.split("\n").filter(Boolean).length > 8) {
-        resultLines.push(`… ${result.finalOutput.split("\n").filter(Boolean).length - 8} more lines`);
+        ctx.ui.notify(`${name} (${id}) ${status}`, status === "completed" ? "info" : "error");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.debug("spawn:cmd", "bg-error", { id, error: msg });
+        tree.updateStatus(id, "failed", 1, msg);
+        handles.delete(id);
+        runStatus = "failed";
+        resultLines = [`Error: ${msg}`];
+        updateWidget();
+        ctx.ui.notify(`${name} (${id}) failed`, "error");
       }
-    } else {
-      resultLines = [result.error ? `Error: ${result.error}` : `${status} with no output`];
-    }
-    updateWidget();
-
-    // Inject into LLM context for the next turn -- no immediate LLM call, no connection error
-    const contextMsg = result.finalOutput
-      ? `Minion ${name} (${id}) ${status}:\n${result.finalOutput}`
-      : `Minion ${name} (${id}) ${status}.${result.error ? ` Error: ${result.error}` : ""}`;
-
-    logger.debug("spawn:cmd", "inject-context", { msg: contextMsg.slice(0, 120) });
-    pi.sendMessage(
-      { customType: "minion-result", content: contextMsg, display: false },
-      { deliverAs: "nextTurn" },
-    );
-
-    ctx.ui.notify(`${name} (${id}) ${status}`, status === "completed" ? "info" : "error");
+    })();
   };
 }
