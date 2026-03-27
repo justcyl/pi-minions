@@ -22,7 +22,6 @@ function write(scope: string, msg: string, data?: unknown): void {
   } catch {
     // never throw from a logger
   }
-  process.stderr.write(line);
 }
 
 export const logger = {

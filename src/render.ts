@@ -54,33 +54,61 @@ export function formatUsage(usage: UsageStats, model?: string): string {
 // TUI render functions for the spawn tool
 // ---------------------------------------------------------------------------
 
+const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
 export function renderCall(
   args: Record<string, unknown>,
   theme: Theme,
   _ctx: unknown,
 ): Text {
-  const agentName = String(args["agent"] ?? "?");
+  const agentName = args["agent"] ? String(args["agent"]) : undefined;
+  const task = String(args["task"] ?? "");
+  const taskPreview = task.length > 60 ? `${task.slice(0, 60)}…` : task;
   const model = args["model"] ? ` [${args["model"]}]` : "";
+
+  const label = agentName
+    ? theme.fg("accent", agentName)
+    : theme.fg("muted", taskPreview);
+
   const text =
     theme.fg("toolTitle", theme.bold("spawn ")) +
-    theme.fg("accent", agentName) +
+    label +
     theme.fg("dim", model);
   return new Text(text, 0, 0);
 }
 
 export function renderResult(
-  result: AgentToolResult<SpawnToolDetails> & { isError?: boolean },
-  { expanded }: ToolRenderResultOptions,
+  result: AgentToolResult<SpawnToolDetails>,
+  { expanded, isPartial }: ToolRenderResultOptions,
   theme: Theme,
-  _ctx: unknown,
+  ctx: { isError: boolean },
 ): Text {
   const details = result.details;
-  const isError = result.isError;
-  const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
+  const isError = ctx.isError;
+
+  // Streaming: show activity while the minion is running
+  if (isPartial && details) {
+    const frame = SPINNER[(details.spinnerFrame ?? 0) % SPINNER.length];
+    const activity = details.activity ?? "thinking…";
+    const line =
+      theme.fg("accent", frame) + " " +
+      theme.fg("accent", details.name ?? "minion") +
+      (details.id ? theme.fg("dim", ` (${details.id})`) : "") +
+      "\n" + theme.fg("dim", `  ⎿  ${activity}`);
+    return new Text(line, 0, 0);
+  }
+
+  // Completed / failed / aborted
+  const isAborted = details?.status === "aborted";
+  const isBad = isAborted || isError;
+  const icon = isAborted
+    ? theme.fg("warning", "■")
+    : isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
+  const nameColor = isBad ? "error" : "success";
 
   const header =
     `${icon} ` +
-    theme.fg("accent", details?.name ?? "minion") +
+    theme.fg(nameColor, details?.name ?? "minion") +
     (details?.id ? theme.fg("dim", ` (${details.id})`) : "") +
     (details?.usage ? " " + theme.fg("muted", formatUsage(details.usage, details.model)) : "");
 

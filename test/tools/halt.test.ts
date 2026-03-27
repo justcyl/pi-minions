@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { ChildProcess } from "node:child_process";
 import { AgentTree } from "../../src/tree.js";
 import { makeHaltExecute, abortAgents } from "../../src/tools/halt.js";
 
@@ -7,30 +6,32 @@ function makeCtx() {
   return { cwd: "/tmp" } as any;
 }
 
-function mockProc(): ChildProcess {
-  return { kill: vi.fn(), killed: false } as unknown as ChildProcess;
+function mockController(): AbortController {
+  const controller = new AbortController();
+  vi.spyOn(controller, "abort");
+  return controller;
 }
 
 describe("abortAgents", () => {
-  it("sends SIGTERM to process and marks tree as aborted", async () => {
+  it("calls abort on controller and marks tree as aborted", async () => {
     const tree = new AgentTree();
-    const handles = new Map<string, ChildProcess | null>();
+    const handles = new Map<string, AbortController>();
     tree.add("id1", "bob", "task");
-    const proc = mockProc();
-    handles.set("id1", proc);
+    const controller = mockController();
+    handles.set("id1", controller);
 
     await abortAgents(["id1"], tree, handles);
 
-    expect(proc.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(controller.abort).toHaveBeenCalled();
     expect(tree.get("id1")!.status).toBe("aborted");
     expect(handles.has("id1")).toBe(false);
   });
 
-  it("still aborts tree node when no process handle exists", async () => {
+  it("still aborts tree node when no controller handle exists", async () => {
     const tree = new AgentTree();
-    const handles = new Map<string, ChildProcess | null>();
+    const handles = new Map<string, AbortController>();
     tree.add("id1", "bob", "task");
-    handles.set("id1", null); // null handle
+    // No handle set
 
     await abortAgents(["id1"], tree, handles);
 
@@ -39,11 +40,11 @@ describe("abortAgents", () => {
 
   it("returns count of aborted agents", async () => {
     const tree = new AgentTree();
-    const handles = new Map<string, ChildProcess | null>();
+    const handles = new Map<string, AbortController>();
     tree.add("a", "bob", "t1");
     tree.add("b", "kevin", "t2");
-    handles.set("a", null);
-    handles.set("b", null);
+    handles.set("a", mockController());
+    handles.set("b", mockController());
 
     const count = await abortAgents(["a", "b"], tree, handles);
     expect(count).toBe(2);
@@ -52,7 +53,7 @@ describe("abortAgents", () => {
 
 describe("makeHaltExecute", () => {
   let tree: AgentTree;
-  let handles: Map<string, ChildProcess | null>;
+  let handles: Map<string, AbortController>;
 
   beforeEach(() => {
     tree = new AgentTree();
@@ -61,7 +62,7 @@ describe("makeHaltExecute", () => {
 
   it("halts a specific running agent by id", async () => {
     tree.add("id1", "bob", "task");
-    handles.set("id1", mockProc());
+    handles.set("id1", mockController());
     const execute = makeHaltExecute(tree, handles);
 
     const result = await execute("tc", { id: "id1" }, undefined, undefined, makeCtx());
@@ -74,8 +75,8 @@ describe("makeHaltExecute", () => {
   it("halts all running agents when id is 'all'", async () => {
     tree.add("a", "bob", "t1");
     tree.add("b", "kevin", "t2");
-    handles.set("a", mockProc());
-    handles.set("b", mockProc());
+    handles.set("a", mockController());
+    handles.set("b", mockController());
     const execute = makeHaltExecute(tree, handles);
 
     const result = await execute("tc", { id: "all" }, undefined, undefined, makeCtx());

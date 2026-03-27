@@ -1,10 +1,9 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
-import type { ChildProcess } from "node:child_process";
 import { AgentTree } from "./tree.js";
 import { SpawnToolParams, makeSpawnExecute } from "./tools/spawn.js";
 import { HaltToolParams, makeHaltExecute } from "./tools/halt.js";
-import { makeSpawnHandler, MINIONS_WIDGET } from "./commands/spawn.js";
+import { ListAgentsParams, makeListAgentsExecute } from "./tools/list-agents.js";
+import { makeSpawnHandler } from "./commands/spawn.js";
 import { makeHaltHandler } from "./commands/halt.js";
 import { renderCall, renderResult } from "./render.js";
 import { logger, LOG_FILE } from "./logger.js";
@@ -13,20 +12,23 @@ export default function (pi: ExtensionAPI): void {
   logger.debug("extension", "loaded", { logFile: LOG_FILE });
 
   const tree = new AgentTree();
-  const handles = new Map<string, ChildProcess | null>();
+  const handles = new Map<string, AbortController>();
 
   pi.registerTool({
     name: "spawn",
     label: "Spawn Minion",
     description:
-      "Delegate a task to a named agent with isolated context. " +
+      "Delegate a task to a named agent or an ephemeral minion with isolated context. " +
+      "If no agent name is provided, spawns an ephemeral minion with default capabilities. " +
       "Agents are discovered from ~/.pi/agent/agents/ and .pi/agents/. " +
-      "The agent runs as a separate pi process with its own context window.",
-    promptSnippet: "Spawn a named agent for isolated task delegation",
+      "The agent runs as an in-process session with its own context window.",
+    promptSnippet: "Spawn a minion for isolated task delegation",
     promptGuidelines: [
       "Use spawn when a task benefits from isolated context or parallel execution.",
-      "Available agents are user-defined in ~/.pi/agent/agents/ -- use the agent name from its frontmatter.",
-      "Check agent availability by trying to spawn; the tool will list available agents if the name is not found.",
+      "When the user explicitly requests spawning or delegating a task, always use this tool.",
+      "Omit the agent parameter to spawn an ephemeral minion with default capabilities.",
+      "Use list_agents to discover available named agents before spawning by name.",
+      "When a spawn result says [HALTED], the user intentionally stopped the minion. Do NOT retry, re-spawn, or ask about it. Acknowledge and move on.",
     ],
     parameters: SpawnToolParams,
     execute: makeSpawnExecute(tree, handles),
@@ -35,22 +37,30 @@ export default function (pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "list_agents",
+    label: "List Agents",
+    description: "List available agents that can be spawned as minions.",
+    promptSnippet: "List available agents for spawning",
+    parameters: ListAgentsParams,
+    execute: makeListAgentsExecute(),
+  });
+
+  pi.registerTool({
     name: "halt",
     label: "Halt Minion",
     description:
-      "Abort a running minion by ID. Use id='all' to halt all running minions. " +
-      "The agent process receives SIGTERM, then SIGKILL after 5 seconds.",
+      "Abort a running minion by ID. Use id='all' to halt all running minions.",
     parameters: HaltToolParams,
     execute: makeHaltExecute(tree, handles),
   });
 
   pi.registerCommand("spawn", {
     description: "Spawn a minion: /spawn <task> [--model <model>]",
-    handler: makeSpawnHandler(tree, handles, pi),
+    handler: makeSpawnHandler(pi),
   });
 
   pi.registerCommand("halt", {
-    description: "Halt minion(s): /halt <id | all>",
+    description: "Halt minion(s): /halt <id | name | all>",
     handler: makeHaltHandler(tree, handles),
   });
 
@@ -71,24 +81,5 @@ export default function (pi: ExtensionAPI): void {
         ? `${event.previousModel.provider}/${event.previousModel.id}`
         : "none",
     });
-  });
-
-  // Clear the minion activity widget when the user sends their next message
-  pi.on("before_agent_start", (_event, ctx) => {
-    ctx.ui.setWidget(MINIONS_WIDGET, undefined);
-  });
-
-  // Render minion-result messages from /spawn so they display cleanly in the TUI
-  pi.registerMessageRenderer("minion-result", (message, { expanded }, theme) => {
-    const header = theme.fg("accent", "▸ minion") + theme.fg("dim", " result");
-    const raw = typeof message.content === "string"
-      ? message.content
-      : message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-    const lines = raw.split("\n");
-    const body = expanded ? raw : lines.slice(0, 4).join("\n");
-    const suffix = !expanded && lines.length > 4
-      ? "\n" + theme.fg("dim", `… ${lines.length - 4} more lines`)
-      : "";
-    return new Text(`${header}\n${theme.fg("toolOutput", body)}${suffix}`, 0, 0);
   });
 }

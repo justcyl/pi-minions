@@ -2,21 +2,21 @@ import { Type } from "@sinclair/typebox";
 import type { Static } from "@sinclair/typebox";
 import type { AgentToolResult, AgentToolUpdateCallback } from "@mariozechner/pi-coding-agent";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { ChildProcess } from "node:child_process";
 import { discoverAgents } from "../agents.js";
-import { spawnAgent, getCurrentDepth, isAtMaxDepth } from "../spawn.js";
+import { runMinionSession } from "../spawn.js";
+import { formatToolCall } from "../render.js";
 import { AgentTree } from "../tree.js";
-import { generateId, pickMinionName } from "../minions.js";
+import { generateId, pickMinionName, defaultMinionTemplate } from "../minions.js";
 import { logger } from "../logger.js";
-import type { UsageStats } from "../types.js";
+import type { AgentConfig, UsageStats } from "../types.js";
 import { emptyUsage } from "../types.js";
 
 export const SpawnToolParams = Type.Object({
-  agent: Type.String({ description: "Name of the agent to invoke (must exist in ~/.pi/agent/agents/ or .pi/agents/)" }),
+  agent: Type.Optional(Type.String({
+    description: "Name of the agent to invoke. If omitted, spawns an ephemeral minion with default capabilities.",
+  })),
   task: Type.String({ description: "Task to delegate to the agent" }),
-  cwd: Type.Optional(Type.String({ description: "Working directory for the agent (defaults to current)" })),
   model: Type.Optional(Type.String({ description: "Override the agent's model" })),
-  maxDepth: Type.Optional(Type.Number({ description: "Max recursion depth (default: 3)" })),
 });
 
 export type SpawnToolParams = Static<typeof SpawnToolParams>;
@@ -30,13 +30,13 @@ export interface SpawnToolDetails {
   usage: UsageStats;
   model?: string;
   finalOutput: string;
+  activity?: string;
+  spinnerFrame?: number;
 }
-
-const DEFAULT_MAX_DEPTH = 3;
 
 export function makeSpawnExecute(
   tree: AgentTree,
-  handles: Map<string, ChildProcess | null>,
+  handles: Map<string, AbortController>,
 ) {
   return async function execute(
     _toolCallId: string,
@@ -45,87 +45,144 @@ export function makeSpawnExecute(
     onUpdate: AgentToolUpdateCallback<SpawnToolDetails> | undefined,
     ctx: ExtensionContext,
   ): Promise<AgentToolResult<SpawnToolDetails>> {
-    const maxDepth = params.maxDepth ?? DEFAULT_MAX_DEPTH;
-
-    if (isAtMaxDepth(maxDepth)) {
-      logger.debug("spawn:tool", "depth limit", { current: getCurrentDepth(), max: maxDepth });
-      throw new Error(`Max depth reached (${getCurrentDepth()}/${maxDepth}). Cannot spawn more minions.`);
-    }
-
-    const { agents } = discoverAgents(ctx.cwd, "both");
-    const config = agents.find((a) => a.name === params.agent);
-
-    if (!config) {
-      const available = agents.map((a) => a.name).join(", ") || "none";
-      logger.debug("spawn:tool", "agent not found", { requested: params.agent, available });
-      throw new Error(`Agent "${params.agent}" not found. Available: ${available}`);
-    }
-
     const id = generateId();
     const name = pickMinionName(tree, id);
-    logger.debug("spawn:tool", "start", { id, name, agent: params.agent, task: params.task });
+
+    let config: AgentConfig;
+    if (params.agent) {
+      const { agents } = discoverAgents(ctx.cwd, "both");
+      const found = agents.find((a) => a.name === params.agent);
+      if (!found) {
+        const available = agents.map((a) => a.name).join(", ") || "none";
+        logger.debug("spawn:tool", "agent not found", { requested: params.agent, available });
+        throw new Error(`Agent "${params.agent}" not found. Available: ${available}`);
+      }
+      config = found;
+    } else {
+      config = defaultMinionTemplate(name, {
+        model: params.model,
+      });
+    }
+
+    logger.debug("spawn:tool", "start", { id, name, agent: params.agent ?? "ephemeral", task: params.task });
 
     tree.add(id, name, params.task);
-    handles.set(id, null);
+    const controller = new AbortController();
+    handles.set(id, controller);
 
-    const emitPartial = (partial: Partial<SpawnToolDetails>) => {
+    // Forward parent signal to our controller
+    if (signal) {
+      const onAbort = () => controller.abort();
+      if (signal.aborted) {
+        controller.abort();
+      } else {
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+    }
+
+    // Track last known streaming state so spinner ticks don't clobber it
+    let lastActivity: string | undefined;
+    let lastOutput = "";
+    let spinnerFrame = 0;
+
+    const emitUpdate = (partial?: Partial<SpawnToolDetails>) => {
+      if (partial?.activity !== undefined) lastActivity = partial.activity;
+      if (partial?.finalOutput !== undefined) lastOutput = partial.finalOutput;
       const node = tree.get(id);
       onUpdate?.({
-        content: [{ type: "text", text: partial.finalOutput ?? "" }],
+        content: [{ type: "text", text: lastOutput }],
         details: {
-          id, name, agentName: params.agent, task: params.task,
+          id, name, agentName: params.agent ?? config.name, task: params.task,
           status: node?.status ?? "running",
           usage: node?.usage ?? emptyUsage(),
           model: params.model ?? config.model,
-          finalOutput: partial.finalOutput ?? "",
-          ...partial,
+          finalOutput: lastOutput,
+          activity: lastActivity,
+          spinnerFrame,
         },
       });
     };
 
-    const parentModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
+    // Animate spinner at ~80ms for smooth braille rotation
+    const spinnerInterval = setInterval(() => {
+      spinnerFrame++;
+      emitUpdate();
+    }, 80);
 
-    const result = await spawnAgent(config, params.task, {
-      signal,
-      overrideModel: params.model,
-      parentModel,
-      onProcess: (proc) => handles.set(id, proc),
-      onEvent: (e) => {
-        if (e.type === "message_end") {
-          tree.updateUsage(id, {
-            input: (tree.get(id)?.usage.input ?? 0) + (e.usage.input ?? 0),
-            output: (tree.get(id)?.usage.output ?? 0) + (e.usage.output ?? 0),
-            cacheRead: (tree.get(id)?.usage.cacheRead ?? 0) + (e.usage.cacheRead ?? 0),
-            cacheWrite: (tree.get(id)?.usage.cacheWrite ?? 0) + (e.usage.cacheWrite ?? 0),
-            cost: (tree.get(id)?.usage.cost ?? 0) + (e.usage.cost ?? 0),
-            contextTokens: e.usage.contextTokens ?? 0,
-            turns: (tree.get(id)?.usage.turns ?? 0) + 1,
-          });
-          emitPartial({ finalOutput: e.text });
-        }
-      },
-    });
+    try {
+      ctx.ui.setWorkingMessage(`minion ${name} working…`);
 
-    const status = result.exitCode === 0 ? "completed" : "failed";
-    logger.debug("spawn:tool", status, { id, exitCode: result.exitCode, outputLen: result.finalOutput.length });
-    tree.updateStatus(id, status === "completed" ? "completed" : "failed", result.exitCode, result.error);
-    handles.delete(id);
+      const result = await runMinionSession(config, params.task, {
+        id,
+        name,
+        signal: controller.signal,
+        modelRegistry: ctx.modelRegistry,
+        parentModel: ctx.model,
+        cwd: ctx.cwd,
+        onToolActivity: (activity) => {
+          if (activity.type === "start") {
+            const desc = formatToolCall(activity.toolName, {});
+            ctx.ui.setWorkingMessage(`${name}: ${desc}`);
+            emitUpdate({ activity: `→ ${desc}` });
+          }
+          if (activity.type === "end") {
+            ctx.ui.setWorkingMessage(`${name} working…`);
+          }
+        },
+        onToolOutput: (toolName, delta) => {
+          const line = delta.trimEnd().split("\n").filter(Boolean).at(-1)?.slice(0, 80) ?? "";
+          if (line) {
+            emitUpdate({ activity: `${toolName}: ${line}` });
+          }
+        },
+        onTextDelta: (_delta, fullText) => {
+          const preview = fullText.split("\n").filter(Boolean).at(-1)?.slice(0, 80) ?? "";
+          emitUpdate({ activity: preview, finalOutput: preview });
+        },
+        onTurnEnd: (turnCount) => {
+          ctx.ui.setWorkingMessage(`${name}: turn ${turnCount}`);
+          // Don't emit "turn X" as activity — it overwrites the last
+          // meaningful status (tool call or text preview). The turn count
+          // shows in the working message instead.
+        },
+      });
 
-    const node = tree.get(id);
-    const details: SpawnToolDetails = {
-      id, name, agentName: params.agent, task: params.task,
-      status, usage: node?.usage ?? result.usage,
-      model: params.model ?? config.model,
-      finalOutput: result.finalOutput,
-    };
+      // Don't overwrite "aborted" status — halt already set it
+      const currentNode = tree.get(id);
+      const status = currentNode?.status === "aborted"
+        ? "aborted"
+        : result.exitCode === 0 ? "completed" : "failed";
 
-    if (result.exitCode !== 0) {
-      throw new Error(result.error ?? `Agent exited with code ${result.exitCode}`);
+      if (status !== "aborted") {
+        logger.debug("spawn:tool", status, { id, exitCode: result.exitCode, outputLen: result.finalOutput.length });
+        tree.updateStatus(id, status, result.exitCode, result.error);
+      }
+      tree.updateUsage(id, result.usage);
+
+      const node = tree.get(id);
+      const details: SpawnToolDetails = {
+        id, name, agentName: params.agent ?? config.name, task: params.task,
+        status, usage: node?.usage ?? result.usage,
+        model: params.model ?? config.model,
+        finalOutput: result.finalOutput,
+      };
+
+      if (status === "aborted") {
+        throw new Error(`[HALTED] Minion ${name} was stopped by the user. This is intentional — do NOT retry or re-spawn.`);
+      }
+
+      if (result.exitCode !== 0) {
+        throw new Error(result.error ?? `Agent exited with code ${result.exitCode}`);
+      }
+
+      return {
+        content: [{ type: "text", text: result.finalOutput || "(no output)" }],
+        details,
+      };
+    } finally {
+      clearInterval(spinnerInterval);
+      ctx.ui.setWorkingMessage();
+      handles.delete(id);
     }
-
-    return {
-      content: [{ type: "text", text: result.finalOutput || "(no output)" }],
-      details,
-    };
   };
 }

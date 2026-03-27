@@ -1,269 +1,216 @@
-import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync, unlinkSync, existsSync } from "node:fs";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import type { AgentConfig, ParsedEvent, SpawnResult, UsageStats } from "./types.js";
+import { fileURLToPath } from "node:url";
+import {
+  createAgentSession,
+  DefaultResourceLoader,
+  SessionManager,
+  SettingsManager,
+  createCodingTools,
+} from "@mariozechner/pi-coding-agent";
+import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type { Model } from "@mariozechner/pi-ai";
+import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
+import type { AgentConfig, SpawnResult, UsageStats } from "./types.js";
 import { emptyUsage } from "./types.js";
 import { logger } from "./logger.js";
 
 // ---------------------------------------------------------------------------
-// JSON event parsing
+// Minion transcript logging
 // ---------------------------------------------------------------------------
 
-export function parseJsonEvent(line: string): ParsedEvent | null {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
+const REPO_ROOT = join(fileURLToPath(import.meta.url), "..", "..");
+const TRANSCRIPT_DIR = join(REPO_ROOT, "tmp", "logs", "minions");
 
-  let raw: Record<string, unknown>;
-  try {
-    raw = JSON.parse(trimmed);
-  } catch {
-    return null;
-  }
-
-  const type = raw["type"];
-
-  if (type === "message_end") {
-    const message = raw["message"] as Record<string, unknown> | undefined;
-    if (!message || message["role"] !== "assistant") return null;
-
-    const content = message["content"] as Array<Record<string, unknown>> | undefined;
-    const text =
-      content
-        ?.filter((b) => b["type"] === "text")
-        .map((b) => b["text"] as string)
-        .join("") ?? "";
-
-    const rawUsage = message["usage"] as Record<string, unknown> | undefined;
-    const usage: Partial<UsageStats> = rawUsage
-      ? {
-          input: (rawUsage["input"] as number) ?? 0,
-          output: (rawUsage["output"] as number) ?? 0,
-          cacheRead: (rawUsage["cacheRead"] as number) ?? 0,
-          cacheWrite: (rawUsage["cacheWrite"] as number) ?? 0,
-          contextTokens: (rawUsage["totalTokens"] as number) ?? 0,
-          cost: ((rawUsage["cost"] as Record<string, number> | undefined)?.["total"]) ?? 0,
-        }
-      : {};
-
-    return { type: "message_end", role: "assistant", text, usage };
-  }
-
-  if (type === "tool_execution_start") {
-    return {
-      type: "tool_start",
-      toolCallId: raw["toolCallId"] as string,
-      toolName: raw["toolName"] as string,
-      args: (raw["args"] as Record<string, unknown>) ?? {},
-    };
-  }
-
-  if (type === "tool_execution_end") {
-    return {
-      type: "tool_end",
-      toolCallId: raw["toolCallId"] as string,
-      toolName: raw["toolName"] as string,
-      isError: Boolean(raw["isError"]),
-    };
-  }
-
-  return null;
-}
-
-export function extractFinalOutput(events: ParsedEvent[]): string {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i];
-    if (e.type === "message_end") return e.text;
-  }
-  return "";
-}
-
-export function extractUsage(events: ParsedEvent[]): UsageStats {
-  const acc = emptyUsage();
-  for (const e of events) {
-    if (e.type === "message_end") {
-      acc.input += e.usage.input ?? 0;
-      acc.output += e.usage.output ?? 0;
-      acc.cacheRead += e.usage.cacheRead ?? 0;
-      acc.cacheWrite += e.usage.cacheWrite ?? 0;
-      acc.cost += e.usage.cost ?? 0;
-      acc.contextTokens = e.usage.contextTokens ?? acc.contextTokens;
-      acc.turns += 1;
-    }
-  }
-  return acc;
-}
-
-// ---------------------------------------------------------------------------
-// Depth tracking
-// ---------------------------------------------------------------------------
-
-export function getCurrentDepth(): number {
-  const val = process.env["PI_MINIONS_DEPTH"];
-  return val ? parseInt(val, 10) || 0 : 0;
-}
-
-export function isAtMaxDepth(maxDepth: number): boolean {
-  return getCurrentDepth() >= maxDepth;
-}
-
-// ---------------------------------------------------------------------------
-// Subprocess args
-// ---------------------------------------------------------------------------
-
-export function buildSpawnArgs(
-  config: AgentConfig,
-  task: string,
-  opts: { overrideModel?: string; parentModel?: string } = {},
-): { args: string[]; env: NodeJS.ProcessEnv } {
-  const args: string[] = ["--mode", "json", "-p", "--no-session"];
-
-  // Resolution order: explicit user override > agent frontmatter model > parent session model
-  const baseModel = opts.overrideModel ?? config.model ?? opts.parentModel;
-  if (baseModel) {
-    // Apply thinking suffix when no explicit user override -- preserve agent/parent thinking
-    const modelArg =
-      config.thinking && !opts.overrideModel
-        ? `${baseModel}:${config.thinking}`
-        : baseModel;
-    args.push("--model", modelArg);
-  }
-
-  if (config.tools && config.tools.length > 0) {
-    args.push("--tools", config.tools.join(","));
-  }
-
-  args.push(task);
-
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    PI_MINIONS_DEPTH: String(getCurrentDepth() + 1),
+function createTranscriptWriter(id: string, name: string, task: string) {
+  try { mkdirSync(TRANSCRIPT_DIR, { recursive: true }); } catch { /* ignore */ }
+  const path = join(TRANSCRIPT_DIR, `${id}-${name}.log`);
+  const write = (line: string) => {
+    try { appendFileSync(path, line + "\n"); } catch { /* never throw from logging */ }
   };
-
-  return { args, env };
+  write(`=== Minion: ${name} (${id}) ===`);
+  write(`Task: ${task}`);
+  write(`Started: ${new Date().toISOString()}`);
+  write("---");
+  return { write, path };
 }
 
 // ---------------------------------------------------------------------------
-// Subprocess spawning
+// Callbacks for streaming progress to the parent
 // ---------------------------------------------------------------------------
 
-function writeTempSystemPrompt(systemPrompt: string): string {
-  const dir = join(tmpdir(), "pi-minions");
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, `prompt-${Date.now()}-${Math.random().toString(36).slice(2)}.md`);
-  writeFileSync(file, systemPrompt, { encoding: "utf-8", mode: 0o600 });
-  return file;
+export interface MinionCallbacks {
+  onToolActivity?: (activity: { type: "start" | "end"; toolName: string }) => void;
+  onToolOutput?: (toolName: string, delta: string) => void;
+  onTextDelta?: (delta: string, fullText: string) => void;
+  onTurnEnd?: (turnCount: number) => void;
 }
 
-function getPiInvocation(args: string[]): { command: string; args: string[] } {
-  // When pi is the current process executable, re-use it
-  const script = process.argv[1];
-  if (script && existsSync(script)) {
-    return { command: process.execPath, args: [script, ...args] };
-  }
-  return { command: "pi", args };
-}
+// ---------------------------------------------------------------------------
+// In-process agent session runner
+// ---------------------------------------------------------------------------
 
-export async function spawnAgent(
+export async function runMinionSession(
   config: AgentConfig,
   task: string,
   opts: {
+    id?: string;
+    name?: string;
     signal?: AbortSignal;
-    overrideModel?: string;
-    parentModel?: string;
-    onEvent?: (e: ParsedEvent) => void;
-    onProcess?: (proc: import("node:child_process").ChildProcess) => void;
-  } = {},
+    modelRegistry: ModelRegistry;
+    parentModel?: Model<any>;
+    cwd: string;
+  } & MinionCallbacks,
 ): Promise<SpawnResult> {
-  const { args, env } = buildSpawnArgs(config, task, {
-    overrideModel: opts.overrideModel,
-    parentModel: opts.parentModel,
+  const loader = new DefaultResourceLoader({
+    cwd: opts.cwd,
+    noExtensions: true,
+    noSkills: true,
+    noPromptTemplates: true,
+    noThemes: true,
+    systemPromptOverride: config.systemPrompt ? () => config.systemPrompt : undefined,
+  });
+  await loader.reload();
+
+  const { session } = await createAgentSession({
+    cwd: opts.cwd,
+    model: opts.parentModel,
+    tools: createCodingTools(opts.cwd),
+    sessionManager: SessionManager.inMemory(opts.cwd),
+    settingsManager: SettingsManager.create(),
+    modelRegistry: opts.modelRegistry,
+    resourceLoader: loader,
   });
 
-  let promptFile: string | null = null;
-  if (config.systemPrompt) {
-    promptFile = writeTempSystemPrompt(config.systemPrompt);
-    // Insert --append-system-prompt before the task (last arg)
-    const task = args.pop()!;
-    args.push("--append-system-prompt", promptFile);
-    args.push(task);
+  // Wire abort signal to session
+  let abortCleanup: (() => void) | undefined;
+  if (opts.signal) {
+    const onAbort = () => session.abort();
+    if (opts.signal.aborted) {
+      session.abort();
+    } else {
+      opts.signal.addEventListener("abort", onAbort, { once: true });
+      abortCleanup = () => opts.signal!.removeEventListener("abort", onAbort);
+    }
   }
 
-  const events: ParsedEvent[] = [];
-  let stderr = "";
+  // Transcript logging — writes raw conversation to a per-minion file
+  const transcriptId = opts.id ?? config.name;
+  const minionName = opts.name ?? config.name;
+  const transcript = createTranscriptWriter(transcriptId, minionName, task);
 
-  const exitCode = await new Promise<number>((resolve) => {
-    const { command, args: finalArgs } = getPiInvocation(args);
-    logger.debug("spawn", "subprocess", { command, args: finalArgs, depth: env["PI_MINIONS_DEPTH"] });
-    const proc = spawn(command, finalArgs, {
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: false,
-    });
-    opts.onProcess?.(proc);
+  // Subscribe to session events for streaming progress + transcript
+  let currentText = "";
+  let turnCount = 0;
+  const usage = emptyUsage();
 
-    let buffer = "";
-    proc.stdout.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString();
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        const event = parseJsonEvent(line);
-        if (event) {
-          if (event.type === "message_end") {
-            // Log text preview AND content block structure so we can see empty-content issues
-            const rawMsg = (() => { try { return JSON.parse(line); } catch { return null; } })();
-            const blocks = (rawMsg?.message?.content ?? []) as Array<{type: string}>;
-            const blockTypes = blocks.map((b) => b.type);
-            const stopReason = rawMsg?.message?.stopReason;
-            logger.debug("spawn:event", "message_end", {
-              text: event.text ? event.text.slice(0, 120) : "(empty)",
-              blockTypes,
-              stopReason,
-            });
-          } else if (event.type === "tool_start") {
-            logger.debug("spawn:event", "tool_start", { toolName: event.toolName, args: event.args });
-          } else {
-            logger.debug("spawn:event", event.type);
-          }
-          events.push(event);
-          opts.onEvent?.(event);
-        }
+  let lastToolOutput = "";
+  let currentToolName = "";
+
+  const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+    if (event.type === "tool_execution_start") {
+      lastToolOutput = "";
+      currentToolName = event.toolName;
+      transcript.write(`\n[tool:start] ${event.toolName} ${JSON.stringify(event.args)}`);
+      opts.onToolActivity?.({ type: "start", toolName: event.toolName });
+    }
+    if (event.type === "tool_execution_end") {
+      transcript.write(`[tool:end] ${event.toolName}${event.isError ? " (ERROR)" : ""}`);
+      opts.onToolActivity?.({ type: "end", toolName: event.toolName });
+      currentToolName = "";
+      usage.turns = turnCount;
+    }
+    if (event.type === "tool_execution_update") {
+      // partialResult contains the cumulative output — extract only the delta
+      const fullText: string = (event as any).partialResult?.content?.[0]?.text ?? "";
+      if (fullText.length > lastToolOutput.length) {
+        const delta = fullText.slice(lastToolOutput.length);
+        transcript.write(`[tool:output] ${delta.trimEnd()}`);
+        opts.onToolOutput?.(currentToolName, delta);
       }
-    });
-
-    proc.stderr.on("data", (chunk: Buffer) => {
-      const text = chunk.toString();
-      stderr += text;
-      // Log stderr live so we catch it even if process crashes before close
-      logger.debug("spawn", "stderr", text.trim().slice(0, 300));
-    });
-
-    proc.on("close", (code) => {
-      logger.debug("spawn", "exit", { code, totalEvents: events.length, hasOutput: events.some(e => e.type === "message_end" && e.text.length > 0) });
-      resolve(code ?? 1);
-    });
-    proc.on("error", () => resolve(1));
-
-    if (opts.signal) {
-      const kill = () => {
-        proc.kill("SIGTERM");
-        setTimeout(() => { if (!proc.killed) proc.kill("SIGKILL"); }, 5000);
-      };
-      if (opts.signal.aborted) kill();
-      else opts.signal.addEventListener("abort", kill, { once: true });
+      lastToolOutput = fullText;
+    }
+    if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+      currentText += event.assistantMessageEvent.delta;
+      opts.onTextDelta?.(event.assistantMessageEvent.delta, currentText);
+    }
+    if (event.type === "message_start") {
+      currentText = "";
+    }
+    if (event.type === "message_end") {
+      if (currentText.trim()) {
+        transcript.write(`\n[assistant]\n${currentText.trim()}`);
+      }
+    }
+    if (event.type === "turn_end") {
+      turnCount++;
+      transcript.write(`\n--- turn ${turnCount} ---`);
+      opts.onTurnEnd?.(turnCount);
     }
   });
 
-  if (promptFile) {
-    try { unlinkSync(promptFile); } catch { /* ignore */ }
-  }
+  try {
+    logger.debug("spawn:session", "start", { name: config.name, task: task.slice(0, 120) });
+    await session.prompt(task);
 
-  return {
-    exitCode,
-    finalOutput: extractFinalOutput(events),
-    usage: extractUsage(events),
-    error: exitCode !== 0 ? `Process exited with code ${exitCode}` : undefined,
-    stderr: stderr || undefined,
-  };
+    // Detect abort — session.prompt() resolves normally after abort,
+    // so we check the signal to distinguish abort from completion.
+    if (opts.signal?.aborted) {
+      const finalOutput = extractLastAssistantText(session.state.messages);
+      transcript.write(`\n=== Aborted (${turnCount} turns) ===`);
+      logger.debug("spawn:session", "aborted", { name: config.name, turns: turnCount });
+      return { exitCode: 1, finalOutput, usage, error: "Aborted" };
+    }
+
+    // Extract final output from the last assistant message
+    const finalOutput = extractLastAssistantText(session.state.messages);
+
+    // Collect usage stats from session
+    try {
+      const stats = session.getSessionStats();
+      usage.input = stats.tokens.input;
+      usage.output = stats.tokens.output;
+      usage.cacheRead = stats.tokens.cacheRead;
+      usage.cacheWrite = stats.tokens.cacheWrite;
+      usage.cost = stats.cost;
+      usage.turns = turnCount;
+    } catch {
+      // Session stats may not be available
+    }
+
+    transcript.write(`\n=== Completed (${turnCount} turns) ===`);
+    transcript.write(`Output:\n${finalOutput}`);
+    logger.debug("spawn:session", "completed", { name: config.name, turns: turnCount, outputLen: finalOutput.length, transcript: transcript.path });
+    return { exitCode: 0, finalOutput, usage };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    transcript.write(`\n=== Error: ${msg} ===`);
+    logger.debug("spawn:session", "error", { name: config.name, error: msg });
+    return { exitCode: 1, finalOutput: currentText, usage, error: msg };
+  } finally {
+    unsubscribe();
+    abortCleanup?.();
+    session.dispose();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function extractLastAssistantText(messages: unknown[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i] as Record<string, unknown> | undefined;
+    if (!msg || msg["role"] !== "assistant") continue;
+    const content = msg["content"];
+    if (typeof content === "string") return content.trim();
+    if (Array.isArray(content)) {
+      const text = content
+        .filter((b: any) => b.type === "text" && b.text)
+        .map((b: any) => b.text as string)
+        .join("");
+      if (text.trim()) return text.trim();
+    }
+  }
+  return "";
 }

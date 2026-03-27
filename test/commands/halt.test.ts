@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { ChildProcess } from "node:child_process";
 import { AgentTree } from "../../src/tree.js";
 import { makeHaltHandler } from "../../src/commands/halt.js";
 
@@ -9,7 +8,7 @@ function makeCtx(notifyFn = vi.fn()) {
 
 describe("makeHaltHandler", () => {
   let tree: AgentTree;
-  let handles: Map<string, ChildProcess | null>;
+  let handles: Map<string, AbortController>;
 
   beforeEach(() => {
     tree = new AgentTree();
@@ -40,8 +39,8 @@ describe("makeHaltHandler", () => {
   it("halts all running agents when 'all'", async () => {
     tree.add("a", "bob", "t1");
     tree.add("b", "kevin", "t2");
-    handles.set("a", null);
-    handles.set("b", null);
+    handles.set("a", new AbortController());
+    handles.set("b", new AbortController());
     const notify = vi.fn();
     const handler = makeHaltHandler(tree, handles);
 
@@ -54,7 +53,7 @@ describe("makeHaltHandler", () => {
 
   it("halts specific agent by id", async () => {
     tree.add("abc123", "bob", "task");
-    handles.set("abc123", null);
+    handles.set("abc123", new AbortController());
     const notify = vi.fn();
     const handler = makeHaltHandler(tree, handles);
 

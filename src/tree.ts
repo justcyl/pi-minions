@@ -29,6 +29,20 @@ export class AgentTree {
     return this.nodes.get(id);
   }
 
+  /** Find a node by ID or by minion name. ID takes priority. */
+  resolve(idOrName: string): AgentNode | undefined {
+    const byId = this.nodes.get(idOrName);
+    if (byId) return byId;
+    // Fall back to name match (most recent if multiple share a name)
+    let match: AgentNode | undefined;
+    for (const node of this.nodes.values()) {
+      if (node.name === idOrName) {
+        if (!match || node.startTime > match.startTime) match = node;
+      }
+    }
+    return match;
+  }
+
   getRunning(): AgentNode[] {
     return Array.from(this.nodes.values()).filter((n) => n.status === "running");
   }

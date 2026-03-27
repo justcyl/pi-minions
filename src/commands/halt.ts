@@ -1,17 +1,16 @@
 import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
-import type { ChildProcess } from "node:child_process";
 import { AgentTree } from "../tree.js";
 import { abortAgents } from "../tools/halt.js";
 
 export function makeHaltHandler(
   tree: AgentTree,
-  handles: Map<string, ChildProcess | null>,
+  handles: Map<string, AbortController>,
 ) {
   return async function handler(args: string, ctx: ExtensionCommandContext): Promise<void> {
     const trimmed = args.trim();
 
     if (!trimmed) {
-      ctx.ui.notify("Usage: /halt <id | all>", "error");
+      ctx.ui.notify("Usage: /halt <id | name | all>", "error");
       return;
     }
 
@@ -26,18 +25,18 @@ export function makeHaltHandler(
       return;
     }
 
-    const node = tree.get(trimmed);
+    const node = tree.resolve(trimmed);
     if (!node) {
       ctx.ui.notify(`Minion not found: ${trimmed}`, "error");
-      return; // command handles this gracefully rather than propagating the throw
-    }
-
-    if (node.status !== "running") {
-      ctx.ui.notify(`Minion ${node.name} (${trimmed}) is not running (status: ${node.status}).`, "info");
       return;
     }
 
-    await abortAgents([trimmed], tree, handles);
-    ctx.ui.notify(`Halted ${node.name} (${trimmed}).`, "info");
+    if (node.status !== "running") {
+      ctx.ui.notify(`Minion ${node.name} (${node.id}) is not running (status: ${node.status}).`, "info");
+      return;
+    }
+
+    await abortAgents([node.id], tree, handles);
+    ctx.ui.notify(`Halted ${node.name} (${node.id}).`, "info");
   };
 }

@@ -82,10 +82,14 @@ export function discoverAgents(
   cwd: string,
   scope: "user" | "project" | "both",
 ): { agents: AgentConfig[]; projectAgentsDir: string | null } {
-  const userDir = join(getAgentDir(), "agents");
+  const agentDir = getAgentDir();
+  const userDir = join(agentDir, "agents");
+  const minionsDir = join(agentDir, "minions");
   const projectAgentsDir = findProjectAgentsDir(cwd);
 
-  const userAgents = scope !== "project" ? loadAgentsFromDir(userDir, "user") : [];
+  const userAgents = scope !== "project"
+    ? [...loadAgentsFromDir(userDir, "user"), ...loadAgentsFromDir(minionsDir, "user")]
+    : [];
   const projectAgents = scope !== "user" && projectAgentsDir ? loadAgentsFromDir(projectAgentsDir, "project") : [];
 
   // Build map: project overrides user on same name

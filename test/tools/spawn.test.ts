@@ -1,21 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { AgentTree } from "../../src/tree.js";
-import type { ChildProcess } from "node:child_process";
 
 // Mock the modules that make external calls
 vi.mock("../../src/agents.js", () => ({
   discoverAgents: vi.fn(),
 }));
-vi.mock("../../src/spawn.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/spawn.js")>();
-  return {
-    ...actual,
-    spawnAgent: vi.fn(),
-  };
-});
+vi.mock("../../src/spawn.js", () => ({
+  runMinionSession: vi.fn(),
+}));
 
 import { discoverAgents } from "../../src/agents.js";
-import { spawnAgent } from "../../src/spawn.js";
+import { runMinionSession } from "../../src/spawn.js";
 import { makeSpawnExecute } from "../../src/tools/spawn.js";
 import { emptyUsage } from "../../src/types.js";
 
@@ -28,39 +23,26 @@ const mockAgent = {
 };
 
 function makeCtx(cwd = "/tmp") {
-  return { cwd } as any;
+  return { cwd, modelRegistry: {}, model: undefined, ui: { setWorkingMessage: vi.fn() } } as any;
 }
 
 beforeEach(() => {
   vi.mocked(discoverAgents).mockReturnValue({ agents: [mockAgent], projectAgentsDir: null });
-  vi.mocked(spawnAgent).mockResolvedValue({
+  vi.mocked(runMinionSession).mockResolvedValue({
     exitCode: 0,
     finalOutput: "done",
     usage: { ...emptyUsage(), input: 100, output: 20, turns: 1 },
   });
-  delete process.env["PI_MINIONS_DEPTH"];
 });
 
 afterEach(() => {
   vi.clearAllMocks();
-  delete process.env["PI_MINIONS_DEPTH"];
 });
 
 describe("makeSpawnExecute", () => {
-  it("throws when at maxDepth", async () => {
-    process.env["PI_MINIONS_DEPTH"] = "3";
-    const tree = new AgentTree();
-    const handles = new Map<string, ChildProcess | null>();
-    const execute = makeSpawnExecute(tree, handles);
-
-    await expect(
-      execute("tc-1", { agent: "scout", task: "find auth" }, undefined, undefined, makeCtx()),
-    ).rejects.toThrow(/depth/i);
-  });
-
   it("throws for unknown agent and message lists available agents", async () => {
     const tree = new AgentTree();
-    const handles = new Map<string, ChildProcess | null>();
+    const handles = new Map<string, AbortController>();
     const execute = makeSpawnExecute(tree, handles);
 
     await expect(
@@ -70,7 +52,7 @@ describe("makeSpawnExecute", () => {
 
   it("adds node to tree with status running, then completed on success", async () => {
     const tree = new AgentTree();
-    const handles = new Map<string, ChildProcess | null>();
+    const handles = new Map<string, AbortController>();
     const execute = makeSpawnExecute(tree, handles);
 
     await execute("tc-1", { agent: "scout", task: "find auth" }, undefined, undefined, makeCtx());
@@ -81,10 +63,10 @@ describe("makeSpawnExecute", () => {
     expect(roots[0]!.task).toBe("find auth");
   });
 
-  it("sets node to failed and throws when spawnAgent returns non-zero exit", async () => {
-    vi.mocked(spawnAgent).mockResolvedValue({ exitCode: 1, finalOutput: "", usage: emptyUsage(), error: "exit 1" });
+  it("sets node to failed and throws when session returns non-zero exit", async () => {
+    vi.mocked(runMinionSession).mockResolvedValue({ exitCode: 1, finalOutput: "", usage: emptyUsage(), error: "exit 1" });
     const tree = new AgentTree();
-    const handles = new Map<string, ChildProcess | null>();
+    const handles = new Map<string, AbortController>();
     const execute = makeSpawnExecute(tree, handles);
 
     await expect(
@@ -94,56 +76,105 @@ describe("makeSpawnExecute", () => {
     expect(tree.getRoots()[0]!.status).toBe("failed");
   });
 
-  it("passes model override to spawnAgent", async () => {
+  it("passes modelRegistry and parentModel to runMinionSession", async () => {
     const tree = new AgentTree();
-    const handles = new Map<string, ChildProcess | null>();
+    const handles = new Map<string, AbortController>();
     const execute = makeSpawnExecute(tree, handles);
-
-    await execute("tc-1", { agent: "scout", task: "t", model: "claude-haiku-4-5" }, undefined, undefined, makeCtx());
-
-    expect(vi.mocked(spawnAgent)).toHaveBeenCalledWith(
-      expect.anything(),
-      "t",
-      expect.objectContaining({ overrideModel: "claude-haiku-4-5" }),
-    );
-  });
-
-  it("passes parentModel from ctx to spawnAgent", async () => {
-    const tree = new AgentTree();
-    const handles = new Map<string, ChildProcess | null>();
-    const execute = makeSpawnExecute(tree, handles);
-    const ctx = { cwd: "/tmp", model: { provider: "anthropic", id: "claude-haiku-4-5" } } as any;
+    const ctx = { cwd: "/tmp", modelRegistry: { find: vi.fn() }, model: { provider: "anthropic", id: "claude-haiku-4-5" }, ui: { setWorkingMessage: vi.fn() } } as any;
 
     await execute("tc-1", { agent: "scout", task: "t" }, undefined, undefined, ctx);
 
-    expect(vi.mocked(spawnAgent)).toHaveBeenCalledWith(
+    expect(vi.mocked(runMinionSession)).toHaveBeenCalledWith(
       expect.anything(),
       "t",
-      expect.objectContaining({ parentModel: "anthropic/claude-haiku-4-5" }),
-    );
-  });
-
-  it("uses undefined overrideModel when no model param", async () => {
-    const tree = new AgentTree();
-    const handles = new Map<string, ChildProcess | null>();
-    const execute = makeSpawnExecute(tree, handles);
-
-    await execute("tc-1", { agent: "scout", task: "t" }, undefined, undefined, makeCtx());
-
-    expect(vi.mocked(spawnAgent)).toHaveBeenCalledWith(
-      expect.anything(),
-      "t",
-      expect.objectContaining({ overrideModel: undefined }),
+      expect.objectContaining({
+        modelRegistry: ctx.modelRegistry,
+        parentModel: ctx.model,
+        cwd: "/tmp",
+      }),
     );
   });
 
   it("returns final output as content text", async () => {
     const tree = new AgentTree();
-    const handles = new Map<string, ChildProcess | null>();
+    const handles = new Map<string, AbortController>();
     const execute = makeSpawnExecute(tree, handles);
 
     const result = await execute("tc-1", { agent: "scout", task: "t" }, undefined, undefined, makeCtx());
     const text = (result.content[0] as { type: "text"; text: string }).text;
     expect(text).toBe("done");
+  });
+
+  it("spawns ephemeral agent when no agent param", async () => {
+    const tree = new AgentTree();
+    const handles = new Map<string, AbortController>();
+    const execute = makeSpawnExecute(tree, handles);
+
+    const result = await execute(
+      "tc-1", { task: "do the thing" }, undefined, undefined, makeCtx(),
+    );
+
+    expect(vi.mocked(runMinionSession)).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "ephemeral" }),
+      "do the thing",
+      expect.anything(),
+    );
+    const text = (result.content[0] as { type: "text"; text: string }).text;
+    expect(text).toBe("done");
+  });
+
+  it("ephemeral agent applies model override", async () => {
+    const tree = new AgentTree();
+    const handles = new Map<string, AbortController>();
+    const execute = makeSpawnExecute(tree, handles);
+
+    await execute(
+      "tc-1", { task: "t", model: "claude-haiku-4-5" }, undefined, undefined, makeCtx(),
+    );
+
+    expect(vi.mocked(runMinionSession)).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "claude-haiku-4-5", source: "ephemeral" }),
+      "t",
+      expect.anything(),
+    );
+  });
+
+  it("still discovers named agent when agent param provided", async () => {
+    const tree = new AgentTree();
+    const handles = new Map<string, AbortController>();
+    const execute = makeSpawnExecute(tree, handles);
+
+    await execute(
+      "tc-1", { agent: "scout", task: "find auth" }, undefined, undefined, makeCtx(),
+    );
+
+    expect(vi.mocked(runMinionSession)).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "scout", source: "user" }),
+      "find auth",
+      expect.anything(),
+    );
+  });
+
+  it("cleans up handle after execution", async () => {
+    const tree = new AgentTree();
+    const handles = new Map<string, AbortController>();
+    const execute = makeSpawnExecute(tree, handles);
+
+    await execute("tc-1", { agent: "scout", task: "t" }, undefined, undefined, makeCtx());
+
+    expect(handles.size).toBe(0);
+  });
+
+  it("cleans up handle even on failure", async () => {
+    vi.mocked(runMinionSession).mockResolvedValue({ exitCode: 1, finalOutput: "", usage: emptyUsage(), error: "fail" });
+    const tree = new AgentTree();
+    const handles = new Map<string, AbortController>();
+    const execute = makeSpawnExecute(tree, handles);
+
+    await expect(
+      execute("tc-1", { agent: "scout", task: "t" }, undefined, undefined, makeCtx()),
+    ).rejects.toThrow();
+
+    expect(handles.size).toBe(0);
   });
 });
