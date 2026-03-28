@@ -34,7 +34,8 @@ Delegate tasks to foreground or background minions.
 - Creates isolated in-process session
 - Streams progress via `session.subscribe()`
 - Abortable via `halt` tool or `/halt` command
-- Uses `noExtensions: true` (no recursive spawning)
+- Inherits parent configuration (system prompt, extensions, skills, themes)
+- Filters pi-minions extension to prevent recursive spawning
 - Foreground: Parent abort signal connected
 - Background: Result auto-delivered via `pi.sendMessage({ deliverAs: "nextTurn" })`
 
@@ -205,11 +206,14 @@ Uses `createAgentSession()` instead of `child_process.spawn()`:
 - Clean abort via `session.abort()`
 - Access to `ctx.modelRegistry`
 
-### No Recursive Spawning
-Minions run with `noExtensions: true`:
-- No spawn/halt tools
-- Only built-in tools (read, bash, edit, write, grep, find, ls)
-- Prevents unbounded recursion
+### Configuration Inheritance
+Minions inherit parent session configuration:
+- System prompts from parent session
+- Extensions (except pi-minions, automatically filtered)
+- Skills, themes, and prompt templates
+- Prevents recursive spawning by filtering pi-minions extension
+
+**Rationale:** Minions have same capabilities as parent (custom tools, skills) while preventing infinite recursion via extension filtering.
 
 ### Abort Throws
 `halt` throws error (not returns) so pi renders red banner. System prompt reinforces "do NOT retry."

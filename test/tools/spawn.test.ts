@@ -25,7 +25,7 @@ const mockAgent = {
 };
 
 function createCtx(cwd = "/tmp") {
-  return { cwd, modelRegistry: {}, model: undefined, ui: { setWorkingMessage: vi.fn() } } as any;
+  return { cwd, modelRegistry: {}, model: undefined, ui: { setWorkingMessage: vi.fn() }, getSystemPrompt: () => "" } as any;
 }
 
 function createDeps() {
@@ -88,7 +88,7 @@ describe("spawn", () => {
   it("passes modelRegistry and parentModel to runMinionSession", async () => {
     const { tree, handles, detachHandles, queue, pi, sessions } = createDeps();
     const execute = spawn(tree, handles, detachHandles, queue, pi, sessions);
-    const ctx = { cwd: "/tmp", modelRegistry: { find: vi.fn() }, model: { provider: "anthropic", id: "claude-haiku-4-5" }, ui: { setWorkingMessage: vi.fn() } } as any;
+    const ctx = { cwd: "/tmp", modelRegistry: { find: vi.fn() }, model: { provider: "anthropic", id: "claude-haiku-4-5" }, ui: { setWorkingMessage: vi.fn() }, getSystemPrompt: () => "" } as any;
 
     await execute("tc-1", { agent: "scout", task: "t" }, undefined, undefined, ctx);
 

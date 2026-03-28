@@ -220,6 +220,7 @@ export function spawn(
         parentModel: ctx.model,
         cwd: ctx.cwd,
         sessions,
+        parentSystemPrompt: ctx.getSystemPrompt(),
         onToolActivity: (activity) => {
           if (activity.type === "start") {
             const desc = formatToolCall(activity.toolName, {});
@@ -347,6 +348,7 @@ export function spawnBg(
       parentModel: ctx.model,
       cwd: ctx.cwd,
       sessions,
+      parentSystemPrompt: ctx.getSystemPrompt(),
       ...createBgCallbacks(tree, id),
     });
 

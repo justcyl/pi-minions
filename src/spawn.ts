@@ -8,6 +8,7 @@ import {
   SettingsManager,
   createCodingTools,
 } from "@mariozechner/pi-coding-agent";
+import type { LoadExtensionsResult } from "@mariozechner/pi-coding-agent";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
 import type { ModelRegistry } from "@mariozechner/pi-coding-agent";
@@ -66,17 +67,29 @@ export async function runMinionSession(
     parentModel?: Model<any>;
     cwd: string;
     sessions?: Map<string, MinionSession>;
+    parentSystemPrompt?: string;
   } & MinionCallbacks,
 ): Promise<SpawnResult> {
   const loader = new DefaultResourceLoader({
     cwd: opts.cwd,
-    noExtensions: true,
-    noSkills: true,
-    noPromptTemplates: true,
-    noThemes: true,
-    systemPromptOverride: config.systemPrompt ? () => config.systemPrompt : undefined,
+    noExtensions: false,
+    noSkills: false,
+    noPromptTemplates: false,
+    noThemes: false,
+    systemPromptOverride: opts.parentSystemPrompt
+      ? () => opts.parentSystemPrompt!
+      : config.systemPrompt
+      ? () => config.systemPrompt
+      : undefined,
+    extensionsOverride: (base: LoadExtensionsResult) => ({
+      ...base,
+      extensions: base.extensions.filter(ext => !ext.resolvedPath.includes("pi-minions")),
+    }),
   });
   await loader.reload();
+
+  // Determine effective system prompt for logging
+  const effectiveSystemPrompt = opts.parentSystemPrompt ?? config.systemPrompt ?? "(default)";
 
   const { session } = await createAgentSession({
     cwd: opts.cwd,
@@ -110,6 +123,8 @@ export async function runMinionSession(
   const transcriptId = opts.id ?? config.name;
   const minionName = opts.name ?? config.name;
   const transcript = createTranscriptWriter(transcriptId, minionName, task);
+  transcript.write(`System Prompt: ${effectiveSystemPrompt}`);
+  transcript.write("---");
 
   // Subscribe to session events for streaming progress + transcript
   let currentText = "";
@@ -162,7 +177,11 @@ export async function runMinionSession(
   });
 
   try {
-    logger.debug("spawn:session", "start", { name: config.name, task: task.slice(0, 120) });
+    logger.debug("spawn:session", "start", {
+      name: config.name,
+      systemPrompt: effectiveSystemPrompt,
+      task: task,
+    });
     await session.prompt(task);
 
     // Detect abort — session.prompt() resolves normally after abort,

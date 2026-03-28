@@ -31,10 +31,16 @@ pi install https://github.com/kalindudc/pi-minions
 
 | Concept | Description |
 |---------|-------------|
-| **Minion** | Isolated pi session, built-in tools only, no extensions |
+| **Minion** | Isolated pi session inheriting parent configuration (extensions filtered) |
 | **Foreground** | Blocks parent, returns result immediately |
 | **Background** | Non-blocking, auto-queues result |
 | **Agents** | Named (`~/.pi/agent/agents/`) or ephemeral (default) |
+
+## Configuration Inheritance
+
+Minions inherit configuration from parent sessions:
+- System prompts, extensions (except pi-minions), skills, themes
+- Prevents recursion by filtering pi-minions extension automatically
 
 ## Commands & Tools
 
