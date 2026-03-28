@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-03-28
+
 feat: in-process minion sessions with streaming and clean abort
 feat: background mode with spawn_bg tool and auto-delivery
 feat: /minions command (list, show, bg, steer subcommands)
