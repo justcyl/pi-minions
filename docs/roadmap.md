@@ -26,6 +26,9 @@
 - [ ] visual minion tree/hierarchy display
 - [ ] export minion transcripts and results to files
 - [ ] performance metrics and analytics dashboard
+- [ ] bug: when multiple parallel minions are working in the foreground and when one finishes before the other, it's completion status does not update until one of the other completes (rendering bug in TUI)
+- [ ] minions spawned in a session should count towards the parent sessions token usage and cost to be visible on the footer widget
+- [ ] /minions commands should work instantaneously so that they can influence foreground minions and display information about foreground minions when the parent sessions is blocked
 
 ### config and support
 - [x] step/turn count limits per minion
@@ -56,7 +59,7 @@
 - [ ] minion snapshots/checkpoints for long-running tasks
 - [ ] minion scheduling (run at specific times)
 
-### v1 and beyond
+### v1.0.0 and beyond
 - [ ] integration with external tools/APIs
 - [ ] collaborative minions (shared state, coordination)
 - [ ] distributed minions (across machines/containers)
