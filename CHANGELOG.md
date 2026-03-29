@@ -1,7 +1,14 @@
 # Changelog
 
 ## [Unreleased]
-fix: add prompt guidelines to `spawn` and `spawn_bg` on parallel minion execution
+
+## [0.3.0] - 2026-03-29
+
+feat: extend agent discovery to support `~/.agents/` and `.agents/` paths
+fix: tool prompt guidelines for parallel minion spawning
+docs: documentation overhaul with getting-started tutorial, architecture, contributing, and agents guides
+test: agent discovery unit tests and parallel foreground spawns e2e test
+chore: update minion name pool
 
 ## [0.2.0] - 2026-03-29
 

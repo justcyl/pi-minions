@@ -1,6 +1,6 @@
 # pi-minions [oo]
 
-[![version 0.2.0](https://img.shields.io/badge/version-0.2.0-blue)](CHANGELOG.md)
+[![version 0.3.0](https://img.shields.io/badge/version-0.3.0-blue)](CHANGELOG.md)
 [![MIT license](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 [![pi extension](https://img.shields.io/badge/pi-extension-purple)](https://github.com/mariozechner/pi-coding-agent)
 
@@ -21,7 +21,7 @@ pi-minions solves this by letting your agent spawn **minions** — isolated sub-
 ## Install
 
 ```bash
-pi install https://github.com/kalindudc/pi-minions
+pi install https://github.com/kalindudc/pi-minions@latest
 ```
 
 ## Quick start
