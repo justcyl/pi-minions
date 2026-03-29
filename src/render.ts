@@ -86,7 +86,7 @@ export function renderResult(
   const isError = ctx.isError;
 
   // Streaming: show activity while the minion is running
-  if (isPartial && details) {
+  if (isPartial && details && details.status === "running") {
     // Cache name/id in render state so they survive tool errors
     if (ctx.state) {
       ctx.state.cachedName = details.name;

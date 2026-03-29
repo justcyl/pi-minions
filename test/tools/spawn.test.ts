@@ -259,6 +259,21 @@ describe("spawn", () => {
     await new Promise((r) => setTimeout(r, 10));
   });
 
+  it("emits a final onUpdate with completed status before the tool resolves", async () => {
+    const { tree, handles, detachHandles, queue, pi, sessions } = createDeps();
+    const execute = spawn(tree, handles, detachHandles, queue, pi, sessions);
+
+    const updates: string[] = [];
+    const onUpdate = (update: any) => {
+      if (update.details?.status) updates.push(update.details.status);
+    };
+
+    await execute("tc-1", { agent: "scout", task: "do thing" }, undefined, onUpdate as any, createCtx());
+
+    expect(updates.length).toBeGreaterThan(0);
+    expect(updates.at(-1)).toBe("completed");
+  });
+
   it("detach path queues result and auto-delivers when session completes", async () => {
     let sessionResolve: (v: any) => void;
     vi.mocked(runMinionSession).mockReturnValue(new Promise((r) => { sessionResolve = r; }));

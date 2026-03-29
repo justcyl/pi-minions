@@ -44,6 +44,7 @@ export class AgentTree {
   resolve(idOrName: string): AgentNode | undefined {
     const byId = this.nodes.get(idOrName);
     if (byId) return byId;
+
     // Fall back to name match (most recent if multiple share a name)
     let match: AgentNode | undefined;
     for (const node of this.nodes.values()) {
@@ -51,6 +52,7 @@ export class AgentTree {
         if (!match || node.startTime > match.startTime) match = node;
       }
     }
+
     return match;
   }
 
@@ -65,31 +67,53 @@ export class AgentTree {
   getDepth(id: string): number {
     const node = this.nodes.get(id);
     if (!node) return 0;
+
     let depth = 0;
     let current = node;
     while (current.parentId) {
       const parent = this.nodes.get(current.parentId);
       if (!parent) break;
+
       depth++;
       current = parent;
     }
+
     return depth;
   }
 
   updateStatus(id: string, status: AgentStatus, exitCode?: number, error?: string): void {
     const node = this.nodes.get(id);
     if (!node) return;
+
     node.status = status;
     if (exitCode !== undefined) node.exitCode = exitCode;
     if (error !== undefined) node.error = error;
     if (status !== "running" && status !== "pending") node.endTime = Date.now();
+
     this.notify();
   }
 
   updateUsage(id: string, partial: Partial<UsageStats>): void {
     const node = this.nodes.get(id);
     if (!node) return;
+
     Object.assign(node.usage, partial);
+    this.notify();
+  }
+
+  getTotalUsage(): UsageStats {
+    const total = emptyUsage();
+
+    for (const node of this.nodes.values()) {
+      total.input += node.usage.input;
+      total.output += node.usage.output;
+      total.cacheRead += node.usage.cacheRead;
+      total.cacheWrite += node.usage.cacheWrite;
+      total.cost += node.usage.cost;
+      total.contextTokens += node.usage.contextTokens;
+      total.turns += node.usage.turns;
+    }
+    return total;
   }
 
   updateActivity(id: string, activity: string): void {

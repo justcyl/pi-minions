@@ -271,6 +271,11 @@ export function spawn(
 
       tree.updateUsage(id, result.usage);
 
+      // Emit a final update with the resolved status. Sibling spinners re-render
+      // this tool via onUpdate; renderResult checks details.status so the
+      // completion layout shows immediately without waiting for the sibling.
+      emitUpdate({ finalOutput: result.finalOutput });
+
       const node = tree.get(id);
       const details: SpawnToolDetails = {
         id, name, agentName: params.agent ?? config.name, task: params.task,

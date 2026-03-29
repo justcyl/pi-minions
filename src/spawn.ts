@@ -257,17 +257,20 @@ export async function runMinionSession(
     transcript.write(`Output:\n${finalOutput}`);
 
     logger.debug("spawn:session", "completed", { name: config.name, turns: turnCount, outputLen: finalOutput.length, transcript: transcript.path });
+
     return { exitCode: 0, finalOutput, usage };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     transcript.write(`\n=== Error: ${msg} ===`);
     logger.debug("spawn:session", "error", { name: config.name, error: msg });
+
     return { exitCode: 1, finalOutput: currentText, usage, error: msg };
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId);
     if (graceTimeoutId !== undefined) clearTimeout(graceTimeoutId);
 
     if (opts.sessions) opts.sessions.delete(sessionId);
+
     unsubscribe();
     abortCleanup?.();
     session.dispose();

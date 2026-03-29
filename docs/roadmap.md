@@ -10,10 +10,10 @@
 - [x] steer minions with additional tasks/prompts (foreground and background)
 - [x] tools for minion/agent discovery (list_agents tool)
 - [x] bug: foreground minions cannot be parallelized, even if that is the intent of the LLM
+- [x] bug: foreground minions cannot be parallelized, even if that is the intent of the LLM
+- [x] add support for the `latest` tag when making releases
 - [ ] minion recursion with depth limits (agent frontmatter config)
 - [ ] minion chaining (output of one feeds into another)
-- [x] bug: foreground minions cannot be parallelized, even if that is the intent of the LLM
-- [ ] add support for the `latest` tag when making releases
 
 ### observability
 - [x] simple widget to see background minion count
@@ -23,15 +23,16 @@
 - [x] detailed minion status (show_minion tool)
 - [x] list running and pending minions (list_minions tool)
 - [x] standardize debug logging
+- [x] bug: when multiple parallel minions are working in the foreground and when one finishes before the other, it's completion status does not update until one of the other completes (rendering bug in TUI)
+- [x] minions spawned in a session should count towards the parent sessions token usage and cost to be visible on the footer widget
 - [ ] TUI dashboard to view full conversation and activity with keyboard hotkeys
 - [ ] minion history/audit trail across sessions
 - [ ] visual minion tree/hierarchy display
 - [ ] export minion transcripts and results to files
 - [ ] performance metrics and analytics dashboard
-- [ ] bug: when multiple parallel minions are working in the foreground and when one finishes before the other, it's completion status does not update until one of the other completes (rendering bug in TUI)
-- [ ] minions spawned in a session should count towards the parent sessions token usage and cost to be visible on the footer widget
 - [ ] /minions commands should work instantaneously so that they can influence foreground minions and display information about foreground minions when the parent sessions is blocked
 - [ ] replace the background hint on foreground minions in the TUI from the banner to the footer similar to the background minion count
+- [ ] the background minion count widget can use our existing custom footer widget
 
 ### config and support
 - [x] step/turn count limits per minion

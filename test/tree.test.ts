@@ -110,6 +110,42 @@ describe("updateUsage", () => {
     expect(node.usage.turns).toBe(2);
     expect(node.usage.output).toBe(0); // unchanged
   });
+
+  it("fires onChange listeners", () => {
+    const listener = vi.fn();
+    tree.onChange(listener);
+    tree.add("a", "bob", "t");
+    listener.mockClear();
+    tree.updateUsage("a", { input: 500 });
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("getTotalUsage", () => {
+  it("returns zero usage when tree is empty", () => {
+    const total = tree.getTotalUsage();
+    expect(total.input).toBe(0);
+    expect(total.cost).toBe(0);
+  });
+
+  it("sums usage across all nodes", () => {
+    tree.add("a", "bob", "t1");
+    tree.add("b", "kevin", "t2");
+    tree.updateUsage("a", { input: 100, output: 20, cost: 0.001 });
+    tree.updateUsage("b", { input: 200, output: 40, cost: 0.002 });
+    const total = tree.getTotalUsage();
+    expect(total.input).toBe(300);
+    expect(total.output).toBe(60);
+    expect(total.cost).toBeCloseTo(0.003);
+  });
+
+  it("includes usage from completed nodes", () => {
+    tree.add("a", "bob", "t");
+    tree.updateUsage("a", { input: 50, cost: 0.0005 });
+    tree.updateStatus("a", "completed", 0);
+    const total = tree.getTotalUsage();
+    expect(total.input).toBe(50);
+  });
 });
 
 describe("remove", () => {

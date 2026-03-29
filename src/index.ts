@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { Model } from "@mariozechner/pi-ai";
 import { AgentTree } from "./tree.js";
 import { ResultQueue } from "./queue.js";
 import { SpawnToolParams, SpawnBgToolParams, spawn, spawnBg } from "./tools/spawn.js";
@@ -15,6 +16,7 @@ import { createSpawnHandler } from "./commands/spawn.js";
 import { createHaltHandler } from "./commands/halt.js";
 import { createMinionsHandler } from "./commands/minions.js";
 import { renderCall, renderResult } from "./render.js";
+import { buildFooterFactory } from "./footer.js";
 import { logger, LOG_FILE } from "./logger.js";
 
 export default function (pi: ExtensionAPI): void {
@@ -136,6 +138,7 @@ export default function (pi: ExtensionAPI): void {
   });
 
   pi.on("model_select", (event, _ctx) => {
+    cachedModel = event.model;
     logger.debug("session", "model_select", {
       model: `${event.model.provider}/${event.model.id}`,
       name: event.model.name,
@@ -149,6 +152,8 @@ export default function (pi: ExtensionAPI): void {
   // Background minion status in footer
   const BG_STATUS_KEY = "minions-bg";
   let cachedUi: ExtensionContext["ui"] | null = null;
+  let cachedCtx: ExtensionContext | null = null;
+  let cachedModel: Model<any> | undefined;
   let lastBgCount = -1;
 
   function refreshBgStatus(): void {
@@ -183,6 +188,14 @@ export default function (pi: ExtensionAPI): void {
   });
 
   pi.on("session_start", (_event, ctx) => {
+    cachedCtx = ctx;
+    cachedModel = ctx.model;
     cachedUi = ctx.ui;
+    cachedUi.setFooter(buildFooterFactory({
+      getCtx: () => cachedCtx,
+      getModel: () => cachedModel,
+      getThinkingLevel: () => pi.getThinkingLevel(),
+      tree,
+    }));
   });
 }

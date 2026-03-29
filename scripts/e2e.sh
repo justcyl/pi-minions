@@ -30,7 +30,7 @@ if [[ -n "$FILTER" ]]; then
 fi
 
 # Start pi in background — non-interactive, no session saved
-pi -e "$(pwd)/src/index.ts" --no-session -p "$PROMPT" >/dev/null 2>&1 &
+pi -e "$(pwd)/src/index.ts" --no-session -p "$PROMPT" --model anthropic/claude-3-haiku-20240307  >/dev/null 2>&1 &
 PID=$!
 
 # Watch progress file with animated spinner

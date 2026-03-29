@@ -151,6 +151,39 @@ describe("renderResult", () => {
     expect(text).toContain("abc123");
   });
 
+  it("renders completion layout when isPartial=true but status is completed", () => {
+    const details = {
+      id: "abc", name: "kevin", agentName: "kevin", task: "t",
+      status: "completed", usage: emptyUsage(), finalOutput: "done",
+      activity: "thinking\u2026", spinnerFrame: 3,
+    };
+    const result = renderResult(
+      { content: [], details },
+      { expanded: false, isPartial: true },
+      theme,
+      { isError: false },
+    );
+    const text = result.render(100).join("\n");
+    expect(text).toContain("\u2713");
+    expect(text).not.toContain("/minions bg");
+  });
+
+  it("renders completion layout when isPartial=true but status is failed", () => {
+    const details = {
+      id: "abc", name: "kevin", agentName: "kevin", task: "t",
+      status: "failed", usage: emptyUsage(), finalOutput: "",
+      spinnerFrame: 2,
+    };
+    const result = renderResult(
+      { content: [], details },
+      { expanded: false, isPartial: true },
+      theme,
+      { isError: false },
+    );
+    const text = result.render(100).join("\n");
+    expect(text).not.toContain("/minions bg");
+  });
+
   it("error render shows 'minion' when no details and no state", () => {
     const result = renderResult(
       { content: [{ type: "text", text: "error" }], details: undefined as any },
