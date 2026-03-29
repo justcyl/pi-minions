@@ -2,7 +2,10 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-29
+
 - feat: /minions list/show/steer commands now work instantaneously via notifications when parent session is busy, while retaining LLM-routed behavior when idle
+- chore: package.json formatting
 
 ## [0.4.0] - 2026-03-29
 
