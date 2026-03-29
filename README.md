@@ -1,4 +1,4 @@
-# pi-minions (oo)
+# pi-minions [oo]
 
 Minimal recursive subagent orchestration for pi.
 
