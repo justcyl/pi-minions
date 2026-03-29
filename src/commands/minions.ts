@@ -1,6 +1,9 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import type { AgentTree } from "../tree.js";
+import type { ResultQueue } from "../queue.js";
+import type { MinionSession } from "../spawn.js";
 import type { DetachHandle } from "../tools/spawn.js";
+import { buildListMinionsText, buildShowMinionText, validateSteerTarget, executeSteering } from "../tools/minions.js";
 import { logger } from "../logger.js";
 
 type ParsedArgs =
@@ -61,6 +64,8 @@ export function createMinionsHandler(
   tree: AgentTree,
   pi: ExtensionAPI,
   detachHandles: Map<string, DetachHandle>,
+  queue: ResultQueue,
+  sessions: Map<string, MinionSession>,
 ) {
   return async function handler(args: string, ctx: ExtensionCommandContext): Promise<void> {
     const parsed = parseMinionArgs(args);
@@ -70,19 +75,43 @@ export function createMinionsHandler(
       return;
     }
 
-    // list, show, steer → delegate to parent so the LLM calls the tool and
-    // sees the result in context. Uses sendDirective to queue visibly when busy.
+    // list, show, steer → when busy, act immediately; when idle, delegate to LLM via sendDirective
     if (parsed.action === "list") {
+      if (!ctx.isIdle()) {
+        const text = buildListMinionsText(tree, queue, detachHandles);
+        ctx.ui.notify(text, "info");
+        return;
+      }
       sendDirective(pi, ctx, "Use the list_minions tool to show all running and pending minions.", "/minions list");
       return;
     }
 
     if (parsed.action === "show") {
+      if (!ctx.isIdle()) {
+        const text = buildShowMinionText(tree, queue, parsed.target);
+        if (text === null) {
+          ctx.ui.notify(`Minion not found: ${parsed.target}`, "error");
+        } else {
+          ctx.ui.notify(text, "info");
+        }
+        return;
+      }
       sendDirective(pi, ctx, `Use the show_minion tool to inspect minion "${parsed.target}".`, `/minions show ${parsed.target}`);
       return;
     }
 
     if (parsed.action === "steer") {
+      if (!ctx.isIdle()) {
+        const validation = validateSteerTarget(tree, sessions, parsed.target);
+        if (!validation.success) {
+          ctx.ui.notify(validation.error, validation.errorType);
+          return;
+        }
+
+        const successMessage = await executeSteering(validation.node, validation.session, parsed.message);
+        ctx.ui.notify(successMessage, "info");
+        return;
+      }
       sendDirective(pi, ctx, `Use the steer_minion tool to steer minion "${parsed.target}" with this message: ${parsed.message}`, `/minions steer ${parsed.target}`);
       return;
     }

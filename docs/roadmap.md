@@ -25,12 +25,13 @@
 - [x] standardize debug logging
 - [x] bug: when multiple parallel minions are working in the foreground and when one finishes before the other, it's completion status does not update until one of the other completes (rendering bug in TUI)
 - [x] minions spawned in a session should count towards the parent sessions token usage and cost to be visible on the footer widget
+- [x] /minions commands should work instantaneously so that they can influence foreground minions and display information about foreground minions when the parent sessions is blocked
 - [ ] TUI dashboard to view full conversation and activity with keyboard hotkeys
 - [ ] minion history/audit trail across sessions
 - [ ] visual minion tree/hierarchy display
 - [ ] export minion transcripts and results to files
 - [ ] performance metrics and analytics dashboard
-- [ ] /minions commands should work instantaneously so that they can influence foreground minions and display information about foreground minions when the parent sessions is blocked
+- [ ] persistent steer history widget in TUI (notify toasts are transient, multiple steers lose history)
 - [ ] replace the background hint on foreground minions in the TUI from the banner to the footer similar to the background minion count
 - [ ] the background minion count widget can use our existing custom footer widget
 

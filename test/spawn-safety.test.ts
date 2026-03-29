@@ -153,8 +153,8 @@ describe("timeout enforcement", () => {
   it("force aborts after grace period", async () => {
     vi.useFakeTimers();
     // Mock must outlive timeout + grace: 100ms + 30s = 30,100ms
-    // 50_000 turns × 1ms = 50,000ms > 30,100ms
-    const mock = setupMock({ totalTurns: 50_000, turnDelayMs: 1, respectsSteer: false });
+    // 500 turns × 100ms = 50,000ms > 30,100ms (~310 timer resolutions, not 31,000)
+    const mock = setupMock({ totalTurns: 500, turnDelayMs: 100, respectsSteer: false });
 
     const resultPromise = runMinionSession(
       makeConfig({ timeout: 100 }),

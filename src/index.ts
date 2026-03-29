@@ -121,7 +121,7 @@ export default function (pi: ExtensionAPI): void {
 
   pi.registerCommand("minions", {
     description: "Manage minions: /minions [list|show|bg|steer] [id|name] [message]",
-    handler: createMinionsHandler(tree, pi, detachHandles),
+    handler: createMinionsHandler(tree, pi, detachHandles, queue, sessions),
   });
 
   pi.registerCommand("halt", {

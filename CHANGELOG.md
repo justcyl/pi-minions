@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- feat: /minions list/show/steer commands now work instantaneously via notifications when parent session is busy, while retaining LLM-routed behavior when idle
+
 ## [0.4.0] - 2026-03-29
 
 - feat: custom footer showing combined minion + parent session token usage for complete session cost visibility

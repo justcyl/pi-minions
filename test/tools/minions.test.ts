@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { AgentTree } from "../../src/tree.js";
 import { ResultQueue } from "../../src/queue.js";
-import { listMinions, showMinion, steerMinion } from "../../src/tools/minions.js";
+import { listMinions, showMinion, steerMinion, buildListMinionsText, buildShowMinionText } from "../../src/tools/minions.js";
 import type { DetachHandle } from "../../src/tools/spawn.js";
 import type { MinionSession } from "../../src/spawn.js";
 import { emptyUsage } from "../../src/types.js";
@@ -168,8 +168,97 @@ describe("steerMinion", () => {
     );
     const text = (result.content[0] as any).text;
 
-    expect(steerFn).toHaveBeenCalledWith("restart the count");
+    expect(steerFn).toHaveBeenCalledWith(expect.stringContaining("[USER STEER]"));
+    expect(steerFn).toHaveBeenCalledWith(expect.stringContaining("restart the count"));
     expect(text).toContain("Steered kevin");
     expect(text).toContain("restart the count");
+  });
+});
+
+describe("buildListMinionsText", () => {
+  it("returns no minions message when empty", () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    const detachHandles = new Map<string, DetachHandle>();
+    
+    const text = buildListMinionsText(tree, queue, detachHandles);
+    expect(text).toContain("No running or pending minions.");
+  });
+
+  it("labels running minions as foreground when in detachHandles", () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    const detachHandles = new Map<string, DetachHandle>();
+    
+    tree.add("a", "kevin", "task A");
+    detachHandles.set("a", { resolve: () => {} });
+    
+    const text = buildListMinionsText(tree, queue, detachHandles);
+    expect(text).toContain("kevin");
+    expect(text).toContain("foreground");
+  });
+
+  it("labels running minions as background when not in detachHandles", () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    const detachHandles = new Map<string, DetachHandle>();
+    
+    tree.add("b", "bob", "task B");
+    // No detach handle = background
+    
+    const text = buildListMinionsText(tree, queue, detachHandles);
+    expect(text).toContain("bob");
+    expect(text).toContain("background");
+  });
+
+  it("includes pending queue results in output", () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    const detachHandles = new Map<string, DetachHandle>();
+    
+    queue.add({
+      id: "x", name: "mel", task: "do stuff", output: "done",
+      usage: emptyUsage(), status: "pending", completedAt: Date.now(),
+      duration: 1000, exitCode: 0,
+    });
+    
+    const text = buildListMinionsText(tree, queue, detachHandles);
+    expect(text).toContain("mel");
+    expect(text).toContain("Pending");
+  });
+});
+
+describe("buildShowMinionText", () => {
+  it("returns null for unknown target", () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    
+    const text = buildShowMinionText(tree, queue, "nope");
+    expect(text).toBeNull();
+  });
+
+  it("returns string with name, status, and activity for known running minion", () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    
+    tree.add("a", "kevin", "analyze code");
+    tree.updateActivity("a", "→ $ grep -r TODO");
+    
+    const text = buildShowMinionText(tree, queue, "kevin");
+    expect(text).not.toBeNull();
+    expect(text).toContain("kevin");
+    expect(text).toContain("running");
+    expect(text).toContain("→ $ grep -r TODO");
+  });
+
+  it("resolves target by ID", () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    
+    tree.add("abc123", "kevin", "task");
+    
+    const text = buildShowMinionText(tree, queue, "abc123");
+    expect(text).not.toBeNull();
+    expect(text).toContain("abc123");
   });
 });

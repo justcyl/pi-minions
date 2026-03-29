@@ -11,7 +11,7 @@ The extension is loaded via `pi -e ./src/index.ts` (development) or `pi install`
 ## Module map
 
 ```mermaid
-graph TD
+graph LR
     index[index.ts<br/>entry point + registration]
 
     index --> tree[tree.ts<br/>AgentTree — minion hierarchy]
@@ -120,7 +120,7 @@ The tool returns immediately. The session runs in the background and its result 
 
 ### Minions and the agent tree
 
-A **minion** is an isolated in-process pi session tracked as an `AgentNode` in the `AgentTree`. Each node has an ID, name, task, status, parent reference, children list, and usage stats. The tree supports arbitrary nesting — a minion can spawn sub-minions (though pi-minions is filtered from child sessions to prevent infinite recursion).
+A **minion** is an isolated in-process pi session tracked as an `AgentNode` in the `AgentTree`. Each node has an ID, name, task, status, parent reference, children list, and usage stats. The tree supports arbitrary nesting — a minion can spawn sub-minions (though pi-minions is filtered from child sessions to prevent infinite recursion, TBD).
 
 Names are drawn from a pool of minion names (`minions.ts`) to keep them human-friendly. If all names are in use, the fallback is `minion-<id>`.
 
