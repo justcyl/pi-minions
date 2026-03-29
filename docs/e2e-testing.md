@@ -1,4 +1,15 @@
-# E2E Testing Guide
+# E2E testing
+
+> See also: [Contributing](contributing.md) · [Architecture](architecture.md)
+
+## Quick start
+
+```bash
+task test:e2e                # run all e2e tests
+task test:e2e -- halt        # run filtered (substring match on filename)
+```
+
+Results: `/tmp/logs/pi-minions/e2e-results.json`
 
 ## Overview
 

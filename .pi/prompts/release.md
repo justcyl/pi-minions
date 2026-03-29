@@ -38,7 +38,7 @@ Output:
 
 **Categorize:**
 - `feat:` or `feat(scope):` → MINOR
-- `fix:` or `fix(scope):` → PATCH  
+- `fix:` or `fix(scope):` → PATCH
 - `docs:`, `chore:`, `test:` → PATCH
 - `BREAKING CHANGE:` in body or `!` after type/scope → MAJOR
 
@@ -69,6 +69,10 @@ Rules:
 - Combine related changes into single entry
 - Order: feat, fix, docs, chore, test
 - Only include significant changes
+
+## Update documentation
+
+Update all version references in docs, READMEs and AGENT.md
 
 ## Present Plan
 
@@ -109,17 +113,17 @@ Ask for user confirmation.
 4. Instruct user:
    ```
    ✅ Files prepared for release vA.B.C
-   
+
    Review the diff above. If everything looks correct, finalize:
-   
+
      ./scripts/release.sh
-   
+
    The script will:
    1. Read version A.B.C from package.json
    2. Create commit: "chore: release vA.B.C"
    3. Create git tag: vA.B.C
    4. Push to origin with tags
-   
+
    If you need to make changes, edit the files and run the script when ready.
    ```
 

@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import type { AgentConfig, AgentSource, ThinkingLevel } from "./types.js";
@@ -65,10 +66,10 @@ export function loadAgentsFromDir(dir: string, source: AgentSource): AgentConfig
   return agents;
 }
 
-function findProjectAgentsDir(cwd: string): string | null {
+function findProjectDir(cwd: string, ...subpath: string[]): string | null {
   let current = cwd;
   while (true) {
-    const candidate = join(current, ".pi", "agents");
+    const candidate = join(current, ...subpath);
     if (existsSync(candidate) && statSync(candidate).isDirectory()) return candidate;
 
     // Stop at git root
@@ -86,20 +87,40 @@ export function discoverAgents(
 ): { agents: AgentConfig[]; projectAgentsDir: string | null } {
   const agentDir = getAgentDir();
 
-  // agents from global dirs, project agents from .pi/agents/
+  // Global dirs: ~/.pi/agent/agents/, ~/.pi/agent/minions/, ~/.agents/agents/, ~/.agents/minions/
   const userDir = join(agentDir, "agents");
   const minionsDir = join(agentDir, "minions");
-  const projectAgentsDir = findProjectAgentsDir(cwd);
+  const dotAgentsUserDir = join(homedir(), ".agents", "agents");
+  const dotMinionsUserDir = join(homedir(), ".agents", "minions");
+
+  // Project dirs: .pi/agents/, .agents/agents/ (walk up to git root)
+  const piProjectDir = findProjectDir(cwd, ".pi", "agents");
+  const piMinionsProjectDir = findProjectDir(cwd, ".pi", "minions");
+  const dotAgentsProjectDir = findProjectDir(cwd, ".agents", "agents");
+  const dotMinionsProjectDir = findProjectDir(cwd, ".agents", "minions");
 
   const userAgents = scope !== "project"
-    ? [...loadAgentsFromDir(userDir, "user"), ...loadAgentsFromDir(minionsDir, "user")]
+    ? [
+        ...loadAgentsFromDir(userDir, "user"),
+        ...loadAgentsFromDir(minionsDir, "user"),
+        ...loadAgentsFromDir(dotAgentsUserDir, "user"),
+        ...loadAgentsFromDir(dotMinionsUserDir, "user"),
+      ]
     : [];
-  const projectAgents = scope !== "user" && projectAgentsDir ? loadAgentsFromDir(projectAgentsDir, "project") : [];
+
+  const projectAgents: AgentConfig[] = [];
+  if (scope !== "user") {
+    if (piProjectDir) projectAgents.push(...loadAgentsFromDir(piProjectDir, "project"));
+    if (piMinionsProjectDir) projectAgents.push(...loadAgentsFromDir(piMinionsProjectDir, "project"));
+    if (dotAgentsProjectDir) projectAgents.push(...loadAgentsFromDir(dotAgentsProjectDir, "project"));
+    if (dotMinionsProjectDir) projectAgents.push(...loadAgentsFromDir(dotMinionsProjectDir, "project"));
+  }
 
   // Build map: project overrides user on same name
   const agentMap = new Map<string, AgentConfig>();
   for (const a of userAgents) agentMap.set(a.name, a);
   for (const a of projectAgents) agentMap.set(a.name, a);
 
+  const projectAgentsDir = piProjectDir ?? dotAgentsProjectDir ?? piMinionsProjectDir ?? dotMinionsProjectDir;
   return { agents: Array.from(agentMap.values()), projectAgentsDir };
 }

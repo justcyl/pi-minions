@@ -1,6 +1,25 @@
-# API Reference
+# Reference
 
-## Tools (LLM-Callable)
+> See also: [Getting started](getting-started.md) · [Patterns](patterns.md) · [Agents](agents.md) · [Architecture](architecture.md)
+
+## Quick reference
+
+| Name | Type | Purpose |
+|------|------|---------|
+| [`spawn`](#spawn--spawn_bg) | Tool | Foreground task delegation (blocks until complete) |
+| [`spawn_bg`](#spawn--spawn_bg) | Tool | Background task delegation (returns immediately) |
+| [`halt`](#halt) | Tool | Abort running minion(s) |
+| [`list_agents`](#list_agents) | Tool | Discover available named agents |
+| [`list_minions`](#list_minions) | Tool | List running and pending minions |
+| [`show_minion`](#show_minion) | Tool | Detailed minion status |
+| [`steer_minion`](#steer_minion) | Tool | Inject message into running minion |
+| [`/spawn`](#spawn-1) | Command | Spawn minion (user-initiated) |
+| [`/minions`](#minions) | Command | Manage minions |
+| [`/halt`](#halt-1) | Command | Abort minion(s) |
+
+---
+
+## Tools (LLM-callable)
 
 ### spawn / spawn_bg
 
@@ -8,10 +27,8 @@ Delegate tasks to foreground or background minions.
 
 **Schema:**
 ```typescript
-{ task: string; agent?: string; model?: string; }
+{ task: string; agent?: string; model?: string }
 ```
-
-**Comparison:**
 
 | Aspect | `spawn` (foreground) | `spawn_bg` (background) |
 |--------|---------------------|------------------------|
@@ -19,41 +36,49 @@ Delegate tasks to foreground or background minions.
 | **Result delivery** | Tool call return value | Auto-queued, delivered next turn |
 | **Use when** | Need result to proceed | Long-running, parallel work |
 | **Detachable?** | Yes, via `/minions bg` | N/A (already detached) |
-| **Example** | `spawn({ task: "Analyze logs" })` | `spawn_bg({ task: "Run tests" })` |
 
 **Returns:**
 ```typescript
-// spawn
-{ exitCode: 0|1; finalOutput: string; usage: { inputTokens, outputTokens, totalCost } }
+// spawn (foreground)
+{ exitCode: 0 | 1; finalOutput: string; usage: { input, output, cacheRead, cacheWrite, cost, turns } }
 
-// spawn_bg  
+// spawn_bg (background)
 { id: string; name: string; status: "running" }
 ```
 
 **Key behaviors:**
-- Creates isolated in-process session
+- Creates an isolated in-process session (see [Architecture — In-process sessions](architecture.md#in-process-sessions-over-child-processes))
 - Streams progress via `session.subscribe()`
 - Abortable via `halt` tool or `/halt` command
 - Inherits parent configuration (system prompt, extensions, skills, themes)
 - Filters pi-minions extension to prevent recursive spawning
-- Foreground: Parent abort signal connected
-- Background: Result auto-delivered via `pi.sendMessage({ deliverAs: "nextTurn" })`
+- Foreground: parent abort signal connected; detachable via `/minions bg`
+- Background: result auto-delivered via `pi.sendMessage({ deliverAs: "nextTurn" })`
+
+> [!NOTE]
+> When a foreground spawn result contains `[USER ACTION]`, the user detached the minion to background via `/minions bg`. The same session continues — no interruption.
+
+See [Patterns — How to delegate a blocking task](patterns.md) for usage examples.
 
 ---
 
 ### halt
 
-Abort running minion(s).
+Abort a running minion by ID or name.
 
-**Schema:** `{ targets: string[] }`
+**Schema:**
+```typescript
+{ id: string }
+```
 
-**Example:** `halt({ targets: ["researcher"] })` or `halt({ targets: ["all"] })`
+**Example:** `halt({ id: "researcher" })` or `halt({ id: "all" })`
 
-**Returns:** `{ halted: string[]; notFound: string[] }`
+**Returns:** Confirmation message (e.g., "Halted minion researcher (a1b2c3d4).")
 
-**Behavior:**
-- Throws `[HALTED]` error (red banner in UI)
-- System prompt instructs LLM: "do NOT retry when [HALTED]"
+> [!WARNING]
+> Halt throws an error so pi renders a red `[HALTED]` banner. The system prompt instructs the LLM: "do NOT retry when `[HALTED]`."
+
+See [Patterns — How to abort and retry](patterns.md) for the abort-and-respawn workflow.
 
 ---
 
@@ -61,12 +86,14 @@ Abort running minion(s).
 
 Discover available named agents.
 
+**Schema:** `{}` (no parameters)
+
 **Returns:**
 ```typescript
 { agents: Array<{ name: string; description: string; file: string }> }
 ```
 
-**Discovery paths:** `~/.pi/agent/agents/`, `.pi/agents/`
+Discovers agents from global and project directories. See [Agents — Where to put agents](agents.md#where-to-put-agents) for the full discovery path list.
 
 ---
 
@@ -74,10 +101,12 @@ Discover available named agents.
 
 List running and pending minions.
 
+**Schema:** `{}` (no parameters)
+
 **Returns:**
 ```typescript
 {
-  running: Array<{ id, name, task, status: "running", mode: "foreground"|"background", lastActivity }>,
+  running: Array<{ id, name, task, status: "running", mode: "foreground" | "background", lastActivity }>,
   pending: Array<{ id, name, task, status: "pending", completedAt }>
 }
 ```
@@ -88,28 +117,37 @@ List running and pending minions.
 
 Detailed status for one minion.
 
-**Schema:** `{ target: string }`
+**Schema:**
+```typescript
+{ target: string }
+```
 
 **Returns:**
 ```typescript
-{ id, name, task, status, mode, lastActivity, output: string, usage: {...} }
+{ id, name, task, status, mode, lastActivity, output: string, usage: { input, output, cost, turns } }
 ```
 
 ---
 
 ### steer_minion
 
-Inject message into running minion.
+Inject a message into a running minion's context.
 
-**Schema:** `{ target: string; message: string }`
+**Schema:**
+```typescript
+{ target: string; message: string }
+```
 
 **Returns:** `{ id, name, steered: true }`
 
-**Behavior:** Message injected before minion's next LLM call
+> [!NOTE]
+> The message is injected before the minion's next LLM call, not instantaneously. There may be a delay if the minion is mid-tool-execution.
+
+See [Patterns — How to redirect a running minion](patterns.md) for steering examples.
 
 ---
 
-## Commands (User-Initiated)
+## Commands (user-initiated)
 
 ### /spawn
 
@@ -125,7 +163,7 @@ Inject message into running minion.
 ```bash
 /spawn Research TypeScript 5.7 features
 /spawn --bg --agent researcher Compare React 19 vs Vue 3.5
-/spawn --model claude-3-7-sonnet-20250219 Review security implications
+/spawn --model claude-sonnet-4-20250514 Review security implications
 ```
 
 ---
@@ -136,7 +174,7 @@ Manage running minions.
 
 | Subcommand | Syntax | Purpose |
 |------------|--------|---------|
-| `list` | `/minions` or `/minions list` | Show running/pending |
+| `list` | `/minions` or `/minions list` | Show running and pending |
 | `show` | `/minions show <id\|name>` | Detailed view |
 | `bg` | `/minions bg <id\|name>` | Send to background (live detach) |
 | `steer` | `/minions steer <id\|name> <msg>` | Inject message |
@@ -147,97 +185,49 @@ Manage running minions.
 
 **Syntax:** `/halt <id|name|all>`
 
-Abort one, multiple, or all running minions.
+Abort one or all running minions.
 
 ---
 
 ## Types
 
-| Type | Key Fields |
+| Type | Key fields |
 |------|-----------|
-| **AgentConfig** | `name, systemPrompt, model?, extensions?` |
-| **SpawnResult** | `exitCode, finalOutput, usage: {inputTokens, outputTokens, totalCost}` |
-| **AgentNode** | `id, name, task, status, mode, parent?, children[], usage` |
-| **QueuedResult** | `id, name, task, output, status, completedAt, usage` |
+| `AgentConfig` | `name, description, systemPrompt, model?, tools?, thinking?, steps?, timeout?, source, filePath` |
+| `SpawnResult` | `exitCode, finalOutput, usage: UsageStats, error?` |
+| `AgentNode` | `id, name, task, status, parentId?, children[], usage, startTime, endTime?, lastActivity?` |
+| `QueuedResult` | `id, name, task, output, usage, status, completedAt, duration, exitCode, error?` |
+| `UsageStats` | `input, output, cacheRead, cacheWrite, cost, contextTokens, turns` |
 
 ---
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PI_MINIONS_DEBUG` | Enable debug logging | `0` |
-| `PI_MINIONS_TIMEOUT` | Global timeout for all minions (ms). 30s grace period before force abort. | unlimited |
+| `PI_MINIONS_TIMEOUT` | Global timeout for all minions (ms). 30s grace period before force abort. | Unlimited |
 
-### Safety Configuration
+### Safety configuration
 
-Configure per-agent via frontmatter or globally via environment variables.
+Configure per-agent via frontmatter or globally via environment variables. See [Agents — Frontmatter reference](agents.md#frontmatter-reference) for the full field list.
 
-| Setting | Frontmatter | Env Var | Behavior |
+| Setting | Frontmatter | Env var | Behavior |
 |---------|-------------|---------|----------|
-| **Step limit** | `steps: 30` | — | Graceful steer at limit, force abort after 1 grace turn |
+| **Step limit** | `steps: 30` | — | Graceful steer at limit, force abort after 2 grace turns |
 | **Timeout** | `timeout: 60000` | `PI_MINIONS_TIMEOUT` | Graceful steer at expiry, force abort after 30s grace |
 
 Per-agent `timeout` overrides `PI_MINIONS_TIMEOUT`. Step limits are per-agent only.
-
-### Agent Discovery
-
-Named agents discovered from:
-1. `~/.pi/agent/agents/` (global)
-2. `.pi/agents/` (project-local)
-
-**Agent file format:**
-```markdown
----
-name: researcher
-description: Research with citations
-model: claude-3-5-sonnet-20241022
-steps: 30
-timeout: 60000
----
-[System prompt content]
-```
 
 ---
 
 ## Logging
 
-| Log Type | Location | Contents | Enable |
+| Log type | Location | Contents | Enable |
 |----------|----------|----------|--------|
 | **Debug** | `/tmp/logs/pi-minions/debug.log` | Extension lifecycle, spawn events, errors. `info`/`warn`/`error` always logged; `debug` respects `PI_MINIONS_DEBUG`. | `PI_MINIONS_DEBUG=1` (for debug level) |
 | **Transcripts** | `/tmp/logs/pi-minions/minions/<id>-<name>.log` | Per-minion conversation (tool calls, output deltas, messages) | Always on |
 
----
-
-## Design Notes
-
-### In-Process Sessions
-Uses `createAgentSession()` instead of `child_process.spawn()`:
-- No process overhead
-- Typed streaming via `session.subscribe()`
-- Clean abort via `session.abort()`
-- Access to `ctx.modelRegistry`
-
-### Configuration Inheritance
-Minions inherit parent session configuration:
-- System prompts from parent session
-- Extensions (except pi-minions, automatically filtered)
-- Skills, themes, and prompt templates
-- Prevents recursive spawning by filtering pi-minions extension
-
-**Rationale:** Minions have same capabilities as parent (custom tools, skills) while preventing infinite recursion via extension filtering.
-
-### Abort Throws
-`halt` throws error (not returns) so pi renders red banner. System prompt reinforces "do NOT retry."
-
-### Background Auto-Delivery
-Results auto-delivered via `pi.sendMessage({ deliverAs: "nextTurn" })`. No manual acceptance required.
-
-### Live Detach
-Foreground spawn races `runMinionSession()` vs detach promise:
-- Normal: session completes → return result
-- Detach: disconnect parent signal, wire to queue, return "sent to bg"
-
-Same session continues—no kill/respawn.
+> For design decisions and architecture, see [Architecture](architecture.md).

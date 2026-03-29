@@ -131,4 +131,72 @@ describe("discoverAgents scope", () => {
 
     rmSync(tmpBase, { recursive: true, force: true });
   });
+
+  it("discovers agents from .agents/agents/ project directory", () => {
+    const tmpBase = join(tmpdir(), `pm-test-${Date.now()}`);
+    const dotAgentsDir = join(tmpBase, ".agents", "agents");
+    mkdirSync(dotAgentsDir, { recursive: true });
+
+    writeFileSync(
+      join(dotAgentsDir, "helper.md"),
+      "---\nname: helper\ndescription: Dot-agents helper\n---\nHelper prompt.",
+    );
+
+    // Create .git so findProjectDir stops here
+    mkdirSync(join(tmpBase, ".git"), { recursive: true });
+
+    const { agents } = discoverAgents(tmpBase, "project");
+    const helper = agents.find((a) => a.name === "helper");
+    expect(helper).toBeDefined();
+    expect(helper!.description).toBe("Dot-agents helper");
+    expect(helper!.source).toBe("project");
+
+    rmSync(tmpBase, { recursive: true, force: true });
+  });
+
+  it("project .agents/agents/ overrides global on name collision", () => {
+    const tmpBase = join(tmpdir(), `pm-test-${Date.now()}`);
+    const dotAgentsDir = join(tmpBase, ".agents", "agents");
+    mkdirSync(dotAgentsDir, { recursive: true });
+    mkdirSync(join(tmpBase, ".git"), { recursive: true });
+
+    writeFileSync(
+      join(dotAgentsDir, "scout.md"),
+      "---\nname: scout\ndescription: Dot-agents scout override\n---\nDot-agents version.",
+    );
+
+    const { agents } = discoverAgents(tmpBase, "both");
+    const scout = agents.find((a) => a.name === "scout");
+    // Project .agents/agents/ should override global user agents
+    expect(scout?.description).toBe("Dot-agents scout override");
+    expect(scout?.source).toBe("project");
+
+    rmSync(tmpBase, { recursive: true, force: true });
+  });
+
+  it("both .pi/agents/ and .agents/agents/ agents are returned together", () => {
+    const tmpBase = join(tmpdir(), `pm-test-${Date.now()}`);
+    const piAgentsDir = join(tmpBase, ".pi", "agents");
+    const dotAgentsDir = join(tmpBase, ".agents", "agents");
+    mkdirSync(piAgentsDir, { recursive: true });
+    mkdirSync(dotAgentsDir, { recursive: true });
+    mkdirSync(join(tmpBase, ".git"), { recursive: true });
+
+    writeFileSync(
+      join(piAgentsDir, "alpha.md"),
+      "---\nname: alpha\ndescription: Pi alpha agent\n---\nAlpha prompt.",
+    );
+    writeFileSync(
+      join(dotAgentsDir, "beta.md"),
+      "---\nname: beta\ndescription: Dot-agents beta agent\n---\nBeta prompt.",
+    );
+
+    const { agents } = discoverAgents(tmpBase, "project");
+    const names = agents.map((a) => a.name);
+    expect(names).toContain("alpha");
+    expect(names).toContain("beta");
+    expect(agents).toHaveLength(2);
+
+    rmSync(tmpBase, { recursive: true, force: true });
+  });
 });
