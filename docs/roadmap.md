@@ -11,7 +11,7 @@
 - [x] tools for minion/agent discovery (list_agents tool)
 - [ ] minion recursion with depth limits (agent frontmatter config)
 - [ ] minion chaining (output of one feeds into another)
-- [ ] bug: foreground minions cannot be parallelized, even if that is the intent of the LLM
+- [x] bug: foreground minions cannot be parallelized, even if that is the intent of the LLM
 
 ### observability
 - [x] simple widget to see background minion count

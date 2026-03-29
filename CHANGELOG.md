@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+fix: add prompt guidelines to `spawn` and `spawn_bg` on parallel minion execution
 
 ## [0.2.0] - 2026-03-29
 

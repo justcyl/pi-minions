@@ -37,8 +37,9 @@ export default function (pi: ExtensionAPI): void {
       "The agent runs as an in-process session with its own context window.",
     promptSnippet: "Spawn a minion for isolated task delegation",
     promptGuidelines: [
-      "Use spawn for foreground task delegation. The tool blocks until the minion completes — use this when you need the result immediately.",
-      "For background execution, use spawn_bg instead.",
+      "Use spawn for \"foreground\" task delegation. The tool blocks until the minion completes and returns its result.",
+      "To spawn multiple minions in parallel, emit multiple spawn calls in a single response. All results are returned together when all minions complete.",
+      "For fire-and-forget delegation where you do not need the result immediately, use spawn_bg instead.",
       "Omit the agent parameter to spawn an ephemeral minion with default capabilities.",
       "Use list_agents to discover available named agents before spawning by name.",
       "When a spawn result contains [USER ACTION] and mentions background, the user used /minions bg to move the minion. This is intentional, not an error. Acknowledge briefly and continue.",
@@ -59,8 +60,9 @@ export default function (pi: ExtensionAPI): void {
       "Use this only when the user explicitly requests background execution.",
     promptSnippet: "Spawn a background minion for fire-and-forget delegation",
     promptGuidelines: [
-      "Only use spawn_bg when the user explicitly asks for background execution.",
-      "For normal task delegation, use spawn (foreground) instead.",
+      "Use spawn_bg for fire-and-forget tasks where you do not need the result before continuing.",
+      "Only use spawn_bg when the user explicitly asks for \"background\" execution.",
+      "For results you need before proceeding, use spawn (foreground) instead.",
     ],
     parameters: SpawnBgToolParams,
     execute: spawnBg(tree, handles, queue, pi, sessions),
