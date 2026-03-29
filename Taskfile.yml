@@ -43,13 +43,13 @@ tasks:
     env:
       PI_MINIONS_DEBUG: "1"
     cmds:
-      - mkdir -p ./tmp/logs
+      - mkdir -p /tmp/logs
       # Rotate: keep last session as .prev so nothing is lost
       - |
-        if [ -s ./tmp/logs/debug.log ]; then
-          cp ./tmp/logs/debug.log ./tmp/logs/debug.prev.log
+        if [ -s /tmp/logs/debug.log ]; then
+          cp /tmp/logs/debug.log /tmp/logs/debug.prev.log
         fi
-      - echo "" > ./tmp/logs/debug.log
+      - echo "" > /tmp/logs/debug.log
       - |
         echo ""
         echo "  ┌───────────────────────────────────────────-──┐"

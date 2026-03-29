@@ -89,6 +89,9 @@ if [ -n "$UNEXPECTED" ]; then
   exit 1
 fi
 
+# re-generate package-lock.json to ensure it matches package.json
+npm install
+
 # Show what will be committed
 echo "📝 Changes to be committed:"
 echo ""

@@ -1,0 +1,8 @@
+{
+  "packages": [
+    {
+      "source": "https://github.com/kalindudc/pi-minions",
+      "extensions": []
+    }
+  ]
+}
