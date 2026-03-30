@@ -12,9 +12,11 @@
 - [x] bug: foreground minions cannot be parallelized, even if that is the intent of the LLM
 - [x] bug: foreground minions cannot be parallelized, even if that is the intent of the LLM
 - [x] add support for the `latest` tag when making releases
+- [ ] performance and benchmark tests for the extension
 - [ ] minion recursion with depth limits (agent frontmatter config)
 - [ ] minion chaining (output of one feeds into another)
 - [ ] bug when the parent uses the halt tool, the aborted minion still sends back a user message, this is wasteful
+- [ ] add `/minions version` command to quickly see the running extension version
 
 ### observability
 - [x] simple widget to see background minion count
