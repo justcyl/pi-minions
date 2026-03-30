@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-03-30
+
+- fix: /minions now behaves instantaneously when there are no foreground minions
+- chore: improve minion status line, move hint from TUI banner to status line
+
 ## [0.5.0] - 2026-03-29
 
 - feat: /minions list/show/steer commands now work instantaneously via notifications when parent session is busy, while retaining LLM-routed behavior when idle
