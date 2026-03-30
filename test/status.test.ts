@@ -44,7 +44,7 @@ describe("createStatusTracker", () => {
   });
 
   describe("status format", () => {
-    it("shows ⟳ bg: count format when minions exist", () => {
+    it("shows [oo] bg: count format when minions exist", () => {
       const tracker = createStatusTracker(tree, detachHandles);
       tracker.setUi(mockUi as any);
 
@@ -53,7 +53,7 @@ describe("createStatusTracker", () => {
 
       const lastCall = mockSetStatus.mock.calls[mockSetStatus.mock.calls.length - 1];
       expect(lastCall[0]).toBe(MINIONS_STATUS_KEY);
-      expect(lastCall[1]).toContain("⟳ bg:");
+      expect(lastCall[1]).toContain("[oo] bg:");
       expect(lastCall[1]).toContain("1");
     });
 
@@ -162,7 +162,7 @@ describe("createStatusTracker", () => {
       tracker.refresh();
 
       const lastCall = mockSetStatus.mock.calls[mockSetStatus.mock.calls.length - 1];
-      expect(lastCall[1]).toContain("⟳ bg: 2");
+      expect(lastCall[1]).toContain("[oo] bg: 2");
     });
 
     it("does not count foreground minions as background", () => {
@@ -175,7 +175,7 @@ describe("createStatusTracker", () => {
       tracker.refresh();
 
       const lastCall = mockSetStatus.mock.calls[mockSetStatus.mock.calls.length - 1];
-      expect(lastCall[1]).toContain("⟳ bg: 1");
+      expect(lastCall[1]).toContain("[oo] bg: 1");
     });
 
     it("updates count when background minion completes", () => {
@@ -186,7 +186,7 @@ describe("createStatusTracker", () => {
       tracker.refresh();
 
       let lastCall = mockSetStatus.mock.calls[mockSetStatus.mock.calls.length - 1];
-      expect(lastCall[1]).toContain("⟳ bg: 1");
+      expect(lastCall[1]).toContain("[oo] bg: 1");
 
       tree.updateStatus("bg1", "completed");
       tracker.refresh();

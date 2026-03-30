@@ -176,7 +176,8 @@ export function buildShowMinionText(tree: AgentTree, queue: ResultQueue, target:
     }
 
     if (node.endTime) lines.push(`  Duration: ${formatDuration(node.endTime - node.startTime)}`);
-    lines.push(`  Usage: ${formatUsage(node.usage)}`);
+    const usageText = formatUsage(node.usage);
+    lines.push(`  Usage: ${usageText || "N/A"}`);
     if (node.error) lines.push(`  Error: ${node.error}`);
   }
   if (result) {

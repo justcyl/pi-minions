@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import type { AgentTree } from "../tree.js";
 import type { ResultQueue } from "../queue.js";
 import type { MinionSession } from "../spawn.js";
@@ -41,28 +41,8 @@ export function parseMinionArgs(args: string): ParsedArgs {
   return { error: `Unknown subcommand: ${action}. Use list, show, bg, or steer.` };
 }
 
-/**
- * Send a directive to the parent. When idle, sends as a normal user message
- * (visible in TUI). When busy, queues as a follow-up and notifies the user.
- */
-function sendDirective(pi: ExtensionAPI, ctx: ExtensionCommandContext, directive: string, label: string): void {
-  const idle = ctx.isIdle();
-  const pending = ctx.hasPendingMessages();
-  logger.debug("minions:cmd", "sendDirective", { label, idle, pending });
-
-  if (idle) {
-    logger.debug("minions:cmd", "sendUserMessage (idle)", { directive: directive.slice(0, 80) });
-    pi.sendUserMessage(directive);
-  } else {
-    logger.debug("minions:cmd", "sendUserMessage (busy, followUp)", { directive: directive.slice(0, 80) });
-    pi.sendUserMessage(directive, { deliverAs: "followUp" });
-    ctx.ui.notify(`Queued: ${label} (will run after current task)`, "info");
-  }
-}
-
 export function createMinionsHandler(
   tree: AgentTree,
-  pi: ExtensionAPI,
   detachHandles: Map<string, DetachHandle>,
   queue: ResultQueue,
   sessions: Map<string, MinionSession>,
@@ -75,44 +55,32 @@ export function createMinionsHandler(
       return;
     }
 
-    // list, show, steer → when busy, act immediately; when idle, delegate to LLM via sendDirective
+    // list, show, steer → always act immediately (instantaneous response)
     if (parsed.action === "list") {
-      if (!ctx.isIdle()) {
-        const text = buildListMinionsText(tree, queue, detachHandles);
-        ctx.ui.notify(text, "info");
-        return;
-      }
-      sendDirective(pi, ctx, "Use the list_minions tool to show all running and pending minions.", "/minions list");
+      const text = buildListMinionsText(tree, queue, detachHandles);
+      ctx.ui.notify(text, "info");
       return;
     }
 
     if (parsed.action === "show") {
-      if (!ctx.isIdle()) {
-        const text = buildShowMinionText(tree, queue, parsed.target);
-        if (text === null) {
-          ctx.ui.notify(`Minion not found: ${parsed.target}`, "error");
-        } else {
-          ctx.ui.notify(text, "info");
-        }
-        return;
+      const text = buildShowMinionText(tree, queue, parsed.target);
+      if (text === null) {
+        ctx.ui.notify(`Minion not found: ${parsed.target}`, "error");
+      } else {
+        ctx.ui.notify(text, "info");
       }
-      sendDirective(pi, ctx, `Use the show_minion tool to inspect minion "${parsed.target}".`, `/minions show ${parsed.target}`);
       return;
     }
 
     if (parsed.action === "steer") {
-      if (!ctx.isIdle()) {
-        const validation = validateSteerTarget(tree, sessions, parsed.target);
-        if (!validation.success) {
-          ctx.ui.notify(validation.error, validation.errorType);
-          return;
-        }
-
-        const successMessage = await executeSteering(validation.node, validation.session, parsed.message);
-        ctx.ui.notify(successMessage, "info");
+      const validation = validateSteerTarget(tree, sessions, parsed.target);
+      if (!validation.success) {
+        ctx.ui.notify(validation.error, validation.errorType);
         return;
       }
-      sendDirective(pi, ctx, `Use the steer_minion tool to steer minion "${parsed.target}" with this message: ${parsed.message}`, `/minions steer ${parsed.target}`);
+
+      const successMessage = await executeSteering(validation.node, validation.session, parsed.message);
+      ctx.ui.notify(successMessage, "info");
       return;
     }
 

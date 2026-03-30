@@ -94,7 +94,7 @@ export function createStatusTracker(
   }
 
   /**
-   * Format the status line: ⟳ bg: <count>   ·   <hint>
+   * Format the status line: [oo] bg: <count>   ·   <hint>
    */
   function formatStatus(
     bgCount: number,
@@ -106,7 +106,7 @@ export function createStatusTracker(
 
     // Only show count if there are minions
     if (bgCount > 0 || fgCount > 0) {
-      parts.push(`⟳ bg: ${bgCount}`);
+      parts.push(`[oo] bg: ${bgCount}`);
     }
 
     // Add hint with separator
