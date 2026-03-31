@@ -13,13 +13,14 @@
 - [x] bug: foreground minions cannot be parallelized, even if that is the intent of the LLM
 - [x] add support for the `latest` tag when making releases
 - [x] performance and benchmark tests for the extension
-- [ ] optimize logger: replace appendFileSync with async batching at src/logger.ts:14
-- [ ] fix memory leak: prune delivered results from ResultQueue at src/queue.ts:4
-- [ ] reduce spinner overhead: increase interval from 80ms to 200ms at src/tools/spawn.ts:196
+- [x] optimize logger: replace appendFileSync with async batching at src/logger.ts:14
+- [x] fix memory leak: prune delivered results from ResultQueue at src/queue.ts:4
+- [x] reduce spinner overhead: increase interval from 80ms to 200ms at src/tools/spawn.ts:196
 - [ ] minion recursion with depth limits (agent frontmatter config)
 - [ ] minion chaining (output of one feeds into another)
 - [ ] bug when the parent uses the halt tool, the aborted minion still sends back a user message, this is wasteful
 - [ ] add `/minions version` command to quickly see the running extension version
+- [ ] bring background minions to foreground with queue
 
 ### observability
 - [x] simple widget to see background minion count
@@ -32,19 +33,18 @@
 - [x] bug: when multiple parallel minions are working in the foreground and when one finishes before the other, it's completion status does not update until one of the other completes (rendering bug in TUI)
 - [x] minions spawned in a session should count towards the parent sessions token usage and cost to be visible on the footer widget
 - [x] /minions commands should work instantaneously so that they can influence foreground minions and display information about foreground minions when the parent sessions is blocked
+- [x] the background minion count widget can use our existing custom footer widget
+- [x] replace the background hint on foreground minions in the TUI from the banner to the footer similar to the background minion count
 - [ ] TUI dashboard to view full conversation and activity with keyboard hotkeys
 - [ ] minion history/audit trail across sessions
 - [ ] visual minion tree/hierarchy display
 - [ ] export minion transcripts and results to files
 - [ ] performance metrics and analytics dashboard
 - [ ] persistent steer history widget in TUI (notify toasts are transient, multiple steers lose history)
-- [ ] replace the background hint on foreground minions in the TUI from the banner to the footer similar to the background minion count
-- [ ] the background minion count widget can use our existing custom footer widget
 
 ### config and support
 - [x] step/turn count limits per minion
 - [x] timeout configuration per minion or globally
-- [ ] bring background minions to foreground with queue
 - [ ] configurable defaults for the extension (via pi config)
 - [ ] cost budgeting per minion with warnings/auto-halt
 - [ ] resource limits (token limits, time limits, turn limits)
