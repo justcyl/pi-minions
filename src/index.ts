@@ -25,10 +25,10 @@ import { minionSpawnRenderer } from "./renderers/minion-spawn.js";
 import { AgentMessage } from "@mariozechner/pi-agent-core";
 
 function createDelegationHint(toolCallCount: number): string {
-  return "\n\n[DELEGATION REMINDER]: You have made: " + toolCallCount +
+  return "\n\nDELEGATION REMINDER: You have made: " + toolCallCount +
         " tool calls. The pi-minions extension is active and provides tools for parallel execution and work delegation." +
-        "\nConsider delegating independent subtasks to minions for faster, isolated processing." +
-        "\nFollow any delegation skills or principles you have been provided by the system or the user.";
+        "\nDELEGATE independent subtasks to minions for faster, isolated processing using the `spawn` and `spawn_bg` tools." +
+        "\nUSE any delegation skills you have available through the system.\n";
 }
 
 function buildPromptFromContext(messages: AgentMessage[]): string {
@@ -221,25 +221,29 @@ export default function (pi: ExtensionAPI): void {
     const currentTime = Date.now();
     const shouldSendHint = !usedMinionsThisSession && isComplexTask && (currentTime - lastHintTime > HINT_INTERVAL);
 
-    const messages = [...event.messages]
-
     // Only inject hint for complex tasks and when prompt changes (avoid spam)
     if (shouldSendHint) {
-      logger.debug("delegation", "injecting_hint", { toolCallCount, promptLength: prompt.length });
-
-      messages.push({
+      const newMessages = [...event.messages];
+      newMessages.push({
         role: "user",
         content: createDelegationHint(toolCallCount),
         timestamp: currentTime,
       });
 
+      logger.debug("delegation", "injecting_hint", {
+        toolCallCount,
+        promptLength: prompt.length,
+        isComplexTask: isComplexTask,
+        timeSinceLastHint: currentTime - lastHintTime,
+        usedMinionsThisSession: usedMinionsThisSession,
+        message: newMessages[newMessages.length - 1],
+      });
+
+
       toolCallCount = 0;
       lastHintTime = currentTime;
+      return { messages: newMessages };
     }
-
-    return {
-      messages: messages,
-    };
   });
 
   pi.on("session_start", (_event, ctx) => {

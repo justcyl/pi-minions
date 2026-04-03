@@ -55,6 +55,8 @@ tasks:
       - |
         rm -rf /tmp/logs/pi-minions/minions/*.log
         rm -rf $HOME/.pi/agent/sessions/*tmp-pi-minions-test*
+        rm -rf /tmp/logs/pi-minions/*.log
+        touch /tmp/logs/pi-minions/debug.log
 
   dev:
     desc: "Load extension into pi. Open 'task logs' in a second terminal to see debug output."
