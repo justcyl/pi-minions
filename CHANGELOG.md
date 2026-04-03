@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-04-03
+
+- feat: add delegation conscience that monitors tool calls and injects delegation hints
+- feat: dev UX improvements — ASCII spinner, interactive fzf model selection, task cleanup
+- feat: test infrastructure — unit tests for delegation conscience, expanded e2e coverage
+
 ## [0.7.0] - 2026-04-03
 
 - feat(observability): add non-intrusive minion activity monitoring widget with real-time streaming
