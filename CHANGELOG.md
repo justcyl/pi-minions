@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-03
+
+- feat(observability): add non-intrusive minion activity monitoring widget with real-time streaming
+- chore: add UX testing harness
+
 ## [0.6.0] - 2026-04-01
 
 - feat: file-based subsession foundation with persistent minion sessions — replaces in-process sessions with SubsessionManager-managed file-based sessions; minions now persist with parent references, separate detach/halt signals, and explicit foreground/background tracking
