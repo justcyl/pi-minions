@@ -1,4 +1,4 @@
-import type { AgentNode, AgentStatus, UsageStats } from "../../src/types.js";
+import type { AgentNode, AgentStatus } from "../../src/types.js";
 import { emptyUsage } from "../../src/types.js";
 
 export class MockAgentTree {

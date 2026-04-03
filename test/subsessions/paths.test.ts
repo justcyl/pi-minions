@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { getMinionsDir, getTempSessionPath, hashCwd } from "../../src/subsessions/paths.js";
-import { join } from "node:path";
 
 describe("hashCwd", () => {
   it("should return a base64url encoded string", () => {

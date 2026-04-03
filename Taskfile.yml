@@ -77,6 +77,8 @@ tasks:
         else
           npx vitest run
         fi
+      - rm -f /tmp/logs/pi-minions/minions/*-test-minion.log
+    silent: true
 
   test:e2e:
     desc: "Run e2e safety control tests against real pi + LLM (usage: task test:e2e [-- filter])"

@@ -31,7 +31,7 @@ export interface CreateMinionSessionOptions {
   parentModel?: import("@mariozechner/pi-ai").Model<any>;
   parentSystemPrompt?: string;
   signal?: AbortSignal;
-  onToolActivity?: (activity: { type: "start" | "end"; toolName: string }) => void;
+  onToolActivity?: (activity: { type: "start" | "end"; toolName: string; args?: Record<string, unknown> }) => void;
   onToolOutput?: (toolName: string, delta: string) => void;
   onTextDelta?: (delta: string, fullText: string) => void;
   onTurnEnd?: (turnCount: number) => void;

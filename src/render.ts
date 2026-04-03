@@ -3,6 +3,7 @@ import type { Theme, ToolRenderResultOptions } from "@mariozechner/pi-coding-age
 import { Text } from "@mariozechner/pi-tui";
 import type { UsageStats } from "./types.js";
 import type { SpawnToolDetails } from "./tools/spawn.js";
+import { minionSpawnRenderer } from "./renderers/minion-spawn.js";
 
 // Formatting helpers
 
@@ -53,8 +54,6 @@ export function formatUsage(usage: UsageStats, model?: string): string {
 
 // TUI render functions
 
-const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
 export function renderCall(
   args: Record<string, unknown>,
   theme: Theme,
@@ -76,60 +75,66 @@ export function renderCall(
   return new Text(text, 0, 0);
 }
 
+
+
 export function renderResult(
   result: AgentToolResult<SpawnToolDetails>,
   { expanded, isPartial }: ToolRenderResultOptions,
   theme: Theme,
   ctx: { isError: boolean; state?: { cachedName?: string; cachedId?: string } },
 ): Text {
-  const details = result.details;
-  const isError = ctx.isError;
+  let details = result.details;
 
-  // Streaming: show activity while the minion is running
-  if (isPartial && details && details.status === "running") {
-    // Cache name/id in render state so they survive tool errors
+  // Cache name/id during streaming so they survive tool errors
+  if (isPartial && details) {
     if (ctx.state) {
       ctx.state.cachedName = details.name;
       ctx.state.cachedId = details.id;
     }
-
-    const frame = SPINNER[(details.spinnerFrame ?? 0) % SPINNER.length];
-    const activity = details.activity ?? "thinking…";
-    const line =
-      theme.fg("accent", frame) + " " +
-      theme.fg("accent", details.name ?? "minion") +
-      (details.id ? theme.fg("dim", ` (${details.id})`) : "") +
-      "\n" + theme.fg("dim", `  ⎿  ${activity}`);
-    return new Text(line, 0, 0);
   }
 
-  // Prefer details, fall back to cached state from streaming phase (details is
-  // undefined when the tool errors, so the cache preserves identity for display)
-  const name = details?.name ?? ctx.state?.cachedName ?? "minion";
-  const id = details?.id ?? ctx.state?.cachedId;
-
-  // Completed / failed / aborted
-  const isAborted = details?.status === "aborted";
-  const isBad = isAborted || isError;
-  const icon = isAborted
-    ? theme.fg("warning", "■")
-    : isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
-  const nameColor = isBad ? "error" : "success";
-
-  const header =
-    `${icon} ` +
-    theme.fg(nameColor, name) +
-    (id ? theme.fg("dim", ` (${id})`) : "") +
-    (details?.usage ? " " + theme.fg("muted", formatUsage(details.usage, details.model)) : "");
-
-  if (!expanded || !details?.finalOutput) {
-    return new Text(header, 0, 0);
+  // When details is missing (e.g., tool error), fall back to cached state
+  if (!details && ctx.state) {
+    const name = ctx.state.cachedName ?? "minion";
+    const id = ctx.state.cachedId;
+    // Reconstruct minimal details for rendering
+    details = {
+      id: id ?? "",
+      name,
+      agentName: name,
+      task: "",
+      status: ctx.isError ? "failed" : "completed",
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
+      finalOutput: "",
+      spinnerFrame: 0,
+    } as SpawnToolDetails;
   }
 
-  const body = details.finalOutput
-    .split("\n")
-    .slice(0, 20)
-    .join("\n");
+  // Final fallback when no details and no cached state
+  if (!details) {
+    details = {
+      id: "",
+      name: "minion",
+      agentName: "minion",
+      task: "",
+      status: ctx.isError ? "failed" : "completed",
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
+      finalOutput: "",
+      spinnerFrame: 0,
+    } as SpawnToolDetails;
+  }
 
-  return new Text(`${header}\n${theme.fg("toolOutput", body)}`, 0, 0);
+  const rendered = minionSpawnRenderer({
+    role: "custom",
+    customType: "minion-spawn",
+    content: "",
+    display: true,
+    details,
+    timestamp: new Date().getTime(),
+  }, { expanded }, theme);
+
+  if (rendered instanceof Text) {
+    return rendered;
+  }
+  return new Text(theme.fg("error", "Failed to render spawn result"), 0, 0);
 }

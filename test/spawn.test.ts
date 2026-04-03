@@ -70,7 +70,7 @@ describe("step limit enforcement", () => {
   });
 
   it("force-aborts after the grace period when the session ignores the steer", async () => {
-    const mock = setup({ totalTurns: 10, turnDelayMs: 1, respectsSteer: false });
+    setup({ totalTurns: 10, turnDelayMs: 1, respectsSteer: false });
     const result = await runMinionSession(makeConfig({ steps: 3 }), "do something", baseOpts);
     expect(result.exitCode).toBe(1);
     expect(result.error).toBeDefined();
@@ -116,7 +116,7 @@ describe("timeout enforcement", () => {
 
   it("force-aborts after the 30s grace period when the session ignores the timeout steer", async () => {
     vi.useFakeTimers();
-    const mock = setup({ totalTurns: 500, turnDelayMs: 100, respectsSteer: false });
+    setup({ totalTurns: 500, turnDelayMs: 100, respectsSteer: false });
     const resultPromise = runMinionSession(
       makeConfig({ timeout: 100 }), "do something", baseOpts,
     );

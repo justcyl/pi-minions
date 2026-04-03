@@ -22,7 +22,7 @@ export interface StatusTracker {
 
 export function createStatusTracker(
   tree: AgentTree,
-  subsessionManager: SubsessionManager,
+  _subsessionManager: SubsessionManager,
 ): StatusTracker {
   let cachedUi: ExtensionContext["ui"] | null = null;
   let lastBgCount = -1;

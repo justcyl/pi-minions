@@ -73,7 +73,7 @@ export class TestHarness {
   ): Promise<void> {
     // Create a mock minion for this tool call
     const id = `mock-${toolName}-${Date.now()}`;
-    const node = this.tree.add(id, toolName, JSON.stringify(args));
+    this.tree.add(id, toolName, JSON.stringify(args));
 
     // Create a subsession for this minion
     await this.subsessionManager.create({

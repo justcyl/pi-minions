@@ -25,6 +25,7 @@ pi-minions is a pi-coding-agent extension (`src/index.ts`) that adds recursive s
 | `task up` | Install deps, verify toolchain |
 | `task dev` | Load extension into pi (debug mode) |
 | `task test` | Run unit tests (vitest) |
+| `task test json=true` | Run unit tests with JSON output (for parsing) |
 | `task typecheck` | TypeScript type check |
 | `task test:e2e` | Run agentic e2e tests |
 

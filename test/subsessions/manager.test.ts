@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SubsessionManager } from "../../src/subsessions/manager.js";
-import { EventBus, MINION_COMPLETE_CHANNEL } from "../../src/subsessions/event-bus.js";
+import { EventBus } from "../../src/subsessions/event-bus.js";
+import { getMinionsDir } from "../../src/subsessions/paths.js";
+import type { MinionSessionMetadata } from "../../src/subsessions/types.js";
 
 // Mock must be at top level (hoisted)
 vi.mock("@mariozechner/pi-coding-agent", () => {
@@ -229,6 +231,110 @@ describe("SubsessionManager", () => {
     it("should handle updating unknown session gracefully", () => {
       // Should not throw
       manager.updateStatus("non-existent", "completed", 0);
+    });
+  });
+
+  describe("resuming a minion session", () => {
+    it("finds the session file path given a minion ID", () => {
+      // Given a minion session file exists with metadata
+      const minionsDir = getMinionsDir(tempDir);
+      mkdirSync(minionsDir, { recursive: true });
+      
+      const sessionFile = join(minionsDir, "2026-04-02T22-46-54-session.jsonl");
+      writeFileSync(sessionFile, '{"type":"session"}\n');
+      
+      const metadata: MinionSessionMetadata = {
+        sessionId: "minion-abc",
+        parentSession: join(tempDir, "parent.jsonl"),
+        spawnedBy: "test",
+        name: "test-minion",
+        task: "test task",
+        createdAt: Date.now(),
+        status: "running",
+      };
+      writeFileSync(`${sessionFile}.minion-meta.json`, JSON.stringify(metadata));
+
+      // When looking up the path by minion ID
+      const foundPath = manager.getSessionPath("minion-abc");
+
+      // Then the correct session file path is returned
+      expect(foundPath).toBe(sessionFile);
+    });
+
+    it("returns undefined when minion ID does not exist", () => {
+      // Given no session files exist
+      // When looking up a non-existent minion ID
+      const foundPath = manager.getSessionPath("non-existent");
+
+      // Then undefined is returned
+      expect(foundPath).toBeUndefined();
+    });
+  });
+
+  describe("identifying current session as a minion", () => {
+    it("extracts minion ID when given a minion session path", () => {
+      // Given a minion session file exists with metadata
+      const minionsDir = getMinionsDir(tempDir);
+      mkdirSync(minionsDir, { recursive: true });
+      
+      const sessionFile = join(minionsDir, "2026-04-02T22-46-54-session.jsonl");
+      writeFileSync(sessionFile, '{"type":"session"}\n');
+      
+      const metadata: MinionSessionMetadata = {
+        sessionId: "minion-xyz",
+        parentSession: join(tempDir, "parent.jsonl"),
+        spawnedBy: "test",
+        name: "test-minion",
+        task: "test task",
+        createdAt: Date.now(),
+        status: "running",
+      };
+      writeFileSync(`${sessionFile}.minion-meta.json`, JSON.stringify(metadata));
+
+      // When checking if the path is a minion session
+      const minionId = manager.getMinionIdFromPath(sessionFile);
+
+      // Then the minion ID is returned
+      expect(minionId).toBe("minion-xyz");
+    });
+
+    it("returns undefined when path is not in minions directory", () => {
+      // Given a non-minion session path
+      const parentSession = join(tempDir, "parent.jsonl");
+
+      // When checking if it's a minion session
+      const minionId = manager.getMinionIdFromPath(parentSession);
+
+      // Then undefined is returned
+      expect(minionId).toBeUndefined();
+    });
+  });
+
+  describe("tracking parent session relationship", () => {
+    it("remembers parent session path for returning from minion", () => {
+      // Given a minion session with parent relationship
+      const minionsDir = getMinionsDir(tempDir);
+      mkdirSync(minionsDir, { recursive: true });
+      
+      const sessionFile = join(minionsDir, "2026-04-02T22-46-54-session.jsonl");
+      writeFileSync(sessionFile, '{"type":"session"}\n');
+      
+      const metadata: MinionSessionMetadata = {
+        sessionId: "minion-123",
+        parentSession: join(tempDir, "parent.jsonl"),
+        spawnedBy: "spawn-tool",
+        name: "child-minion",
+        task: "child task",
+        createdAt: Date.now(),
+        status: "running",
+      };
+      writeFileSync(`${sessionFile}.minion-meta.json`, JSON.stringify(metadata));
+
+      // When retrieving the minion metadata
+      const found = manager.getMetadata("minion-123");
+
+      // Then the parent session path is available
+      expect(found?.parentSession).toBe(join(tempDir, "parent.jsonl"));
     });
   });
 });

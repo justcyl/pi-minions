@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import {
   createAgentSession,
   DefaultResourceLoader,
@@ -7,23 +7,28 @@ import {
   SettingsManager,
   createCodingTools,
 } from "@mariozechner/pi-coding-agent";
-import type { AgentSession, ModelRegistry } from "@mariozechner/pi-coding-agent";
-import type { AgentConfig } from "../types.js";
+import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { MinionSessionMetadata, MinionSessionHandle, CreateMinionSessionOptions } from "./types.js";
 import { logger } from "../logger.js";
 import type { EventBus } from "./event-bus.js";
-import { MINION_COMPLETE_CHANNEL } from "./event-bus.js";
-import { getMinionsDir, hashCwd } from "./paths.js";
+import { MINION_COMPLETE_CHANNEL, MINION_PROGRESS_CHANNEL } from "./event-bus.js";
+import { getMinionsDir } from "./paths.js";
 
 export class SubsessionManager {
   private activeSessions = new Map<string, AgentSession>();
   private metadataCache = new Map<string, MinionSessionMetadata>();
+  private unsubscribers = new Map<string, () => void>();
 
   constructor(
     private cwd: string,
     private parentSessionPath: string,
-    private eventBus?: EventBus
+    public readonly eventBus?: EventBus
   ) {}
+
+  /** Emit progress events via EventBus for parent to receive */
+  private emitProgress(id: string, progress: unknown): void {
+    this.eventBus?.emit(MINION_PROGRESS_CHANNEL, { id, progress });
+  }
 
   async create(options: CreateMinionSessionOptions): Promise<MinionSessionHandle> {
     const { id, name, task, config, spawnedBy, modelRegistry, parentModel, parentSystemPrompt, signal } = options;
@@ -50,9 +55,11 @@ export class SubsessionManager {
     // Use create() to create a new session file
     const sessionManager = SessionManager.create(this.cwd, minionsDir);
 
-    // Initialize session file with metadata header (write it after SessionManager creates the file)
-    this.writeMetadata(sessionManager.getSessionFile() ?? sessionPath, metadata);
+    // Store metadata in cache and write to separate metadata file
+    // (Don't modify pi's session file format - it uses {"type":"session",...})
+    const actualPath = sessionManager.getSessionFile() ?? sessionPath;
     this.metadataCache.set(id, metadata);
+    this.writeMetadataFile(actualPath, metadata);
 
     // Set up resource loader with extensions filtered to prevent recursion
     const loader = new DefaultResourceLoader({
@@ -94,8 +101,12 @@ export class SubsessionManager {
 
     // Subscribe to session events for progress tracking and completion detection
     const unsubscribe = session.subscribe((event) => {
+      // Emit progress via EventBus for parent monitoring
+      this.emitProgress(id, event);
+
       if (event.type === "tool_execution_start") {
-        options.onToolActivity?.({ type: "start", toolName: event.toolName });
+        const args = (event as any).args as Record<string, unknown> | undefined;
+        options.onToolActivity?.({ type: "start", toolName: event.toolName, args });
       }
       if (event.type === "tool_execution_end") {
         options.onToolActivity?.({ type: "end", toolName: event.toolName });
@@ -120,6 +131,9 @@ export class SubsessionManager {
         this.eventBus?.emit(MINION_COMPLETE_CHANNEL, { id, exitCode, output: currentFullText });
       }
     });
+
+    // Store unsubscribe for cleanup
+    this.unsubscribers.set(id, unsubscribe);
 
     // Wire abort signal
     let abortCleanup: (() => void) | undefined;
@@ -146,6 +160,7 @@ export class SubsessionManager {
     // Clean up when session ends
     const cleanup = () => {
       unsubscribe();
+      this.unsubscribers.delete(id);
       abortCleanup?.();
       this.activeSessions.delete(id);
     };
@@ -174,7 +189,6 @@ export class SubsessionManager {
       cleanup();
     });
 
-    const actualPath = sessionManager.getSessionFile() ?? sessionPath;
     logger.debug("subsession", "created", { id, name, path: actualPath });
 
     return {
@@ -207,12 +221,11 @@ export class SubsessionManager {
     const files = this.listSessionFiles(minionsDir);
     
     for (const file of files) {
-      if (file.startsWith(`${id}.`)) {
-        const metadata = this.readMetadata(join(minionsDir, file));
-        if (metadata) {
-          this.metadataCache.set(id, metadata);
-          return metadata;
-        }
+      // Read metadata and check sessionId (filenames are timestamp-based)
+      const metadata = this.readMetadataFile(join(minionsDir, file));
+      if (metadata?.sessionId === id) {
+        this.metadataCache.set(id, metadata);
+        return metadata;
       }
     }
 
@@ -229,7 +242,7 @@ export class SubsessionManager {
     const results: MinionSessionMetadata[] = [];
 
     for (const file of files) {
-      const metadata = this.readMetadata(join(minionsDir, file));
+      const metadata = this.readMetadataFile(join(minionsDir, file));
       if (metadata) {
         results.push(metadata);
       }
@@ -242,6 +255,53 @@ export class SubsessionManager {
     return this.activeSessions.get(id);
   }
 
+  /** Check if a session path is a minion session and return the minion ID */
+  getMinionIdFromPath(sessionPath: string): string | undefined {
+    logger.debug("subsession", "getMinionIdFromPath-start", { sessionPath });
+    const minionsDir = getMinionsDir(this.cwd);
+    logger.debug("subsession", "checking-minions-dir", { sessionPath, minionsDir, startsWith: sessionPath.startsWith(minionsDir) });
+    if (!sessionPath.startsWith(minionsDir)) {
+      logger.debug("subsession", "not-minions-dir", { sessionPath, minionsDir });
+      return undefined;
+    }
+    // Read metadata to get the session ID
+    const metadata = this.readMetadataFile(sessionPath);
+    logger.debug("subsession", "read-metadata-result", { sessionPath, hasMetadata: !!metadata });
+    if (metadata) {
+      logger.debug("subsession", "extracted-id", { sessionPath, id: metadata.sessionId });
+      return metadata.sessionId;
+    }
+    logger.debug("subsession", "no-metadata-returning-undefined", { sessionPath });
+    return undefined;
+  }
+
+  /** Get the session file path for a minion by ID */
+  getSessionPath(id: string): string | undefined {
+    const minionsDir = getMinionsDir(this.cwd);
+    const files = this.listSessionFiles(minionsDir);
+    logger.debug("subsession", "getSessionPath", { id, fileCount: files.length });
+    
+    for (const file of files) {
+      // Check if file contains the minion ID by reading metadata
+      const filePath = join(minionsDir, file);
+      const metadata = this.readMetadataFile(filePath);
+      if (metadata?.sessionId === id) {
+        logger.debug("subsession", "found-session-path", { id, path: filePath });
+        return filePath;
+      }
+    }
+    logger.debug("subsession", "session-path-not-found", { id });
+    return undefined;
+  }
+
+  /** Get metadata for a minion session by ID */
+  getCurrentMetadata(): MinionSessionMetadata | undefined {
+    // This is used when we're in a minion session to get its metadata
+    const metadata = this.list();
+    // Return the most recently created running minion as current
+    return metadata.find(m => m.status === "running");
+  }
+
   updateStatus(id: string, status: MinionSessionMetadata["status"], exitCode?: number, error?: string): void {
     const metadata = this.metadataCache.get(id) ?? this.getMetadata(id);
     if (metadata) {
@@ -249,14 +309,14 @@ export class SubsessionManager {
       if (exitCode !== undefined) metadata.exitCode = exitCode;
       if (error !== undefined) metadata.error = error;
       
+      // Find the session file and update its metadata
       const minionsDir = getMinionsDir(this.cwd);
       const files = this.listSessionFiles(minionsDir);
       for (const file of files) {
-        if (file.startsWith(`${id}.`)) {
-          const sessionPath = join(minionsDir, file);
-          if (existsSync(sessionPath)) {
-            this.writeMetadata(sessionPath, metadata);
-          }
+        const sessionPath = join(minionsDir, file);
+        const fileMetadata = this.readMetadataFile(sessionPath);
+        if (fileMetadata?.sessionId === id) {
+          this.writeMetadataFile(sessionPath, metadata);
           break;
         }
       }
@@ -273,39 +333,71 @@ export class SubsessionManager {
     }
   }
 
-  private writeMetadata(path: string, metadata: MinionSessionMetadata): void {
+  /** Get metadata file path for a session file */
+  private getMetadataPath(sessionPath: string): string {
+    return `${sessionPath}.minion-meta.json`;
+  }
+
+  /** Write metadata to separate file (don't modify pi's session file) */
+  private writeMetadataFile(sessionPath: string, metadata: MinionSessionMetadata): void {
     try {
-      // Read existing content
-      let content = "";
-      if (existsSync(path)) {
-        content = readFileSync(path, "utf-8");
-      }
-      const lines = content.split("\n").filter(Boolean);
-      
-      // Replace or add header
-      const header = JSON.stringify({ __metadata: metadata });
-      if (lines.length > 0 && lines[0].includes('"__metadata"')) {
-        lines[0] = header;
-      } else {
-        lines.unshift(header);
-      }
-      
-      writeFileSync(path, lines.join("\n") + "\n");
-    } catch {
-      // Ignore write errors
+      const metaPath = this.getMetadataPath(sessionPath);
+      writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
+      logger.debug("subsession", "metadata-written", { sessionPath, metaPath });
+    } catch (err) {
+      logger.debug("subsession", "metadata-write-error", { sessionPath, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
-  private readMetadata(path: string): MinionSessionMetadata | undefined {
+  /** Read metadata from separate file, with fallback to legacy format in session file */
+  private readMetadataFile(sessionPath: string): MinionSessionMetadata | undefined {
     try {
-      const content = readFileSync(path, "utf-8");
-      const firstLine = content.split("\n")[0];
-      if (!firstLine) return undefined;
-      
-      const parsed = JSON.parse(firstLine);
-      return parsed.__metadata as MinionSessionMetadata;
-    } catch {
+      // Try new format first: separate metadata file
+      const metaPath = this.getMetadataPath(sessionPath);
+      if (existsSync(metaPath)) {
+        const content = readFileSync(metaPath, "utf-8");
+        const metadata = JSON.parse(content) as MinionSessionMetadata;
+        logger.debug("subsession", "metadata-read", { sessionPath, metaPath, id: metadata.sessionId });
+        return metadata;
+      }
+
+      // Fallback to legacy format: metadata embedded in session file first line
+      if (existsSync(sessionPath)) {
+        const content = readFileSync(sessionPath, "utf-8");
+        const firstLine = content.split("\n")[0];
+        if (firstLine) {
+          const parsed = JSON.parse(firstLine);
+          if (parsed.__metadata) {
+            logger.debug("subsession", "metadata-read-legacy", { sessionPath, id: parsed.__metadata.sessionId });
+            return parsed.__metadata as MinionSessionMetadata;
+          }
+        }
+      }
+
+      logger.debug("subsession", "metadata-file-not-found", { sessionPath, metaPath });
       return undefined;
+    } catch (err) {
+      logger.debug("subsession", "metadata-read-error", { sessionPath, error: err instanceof Error ? err.message : String(err) });
+      return undefined;
+    }
+  }
+
+  /** Load session info using SessionManager.list() - proper API usage */
+  async loadSessionInfo(): Promise<void> {
+    const minionsDir = getMinionsDir(this.cwd);
+    try {
+      const sessions = await SessionManager.list(this.cwd, minionsDir);
+      logger.debug("subsession", "loaded-session-list", { count: sessions.length });
+      for (const session of sessions) {
+        logger.debug("subsession", "session-info", { 
+          path: session.path, 
+          id: session.id, 
+          name: session.name,
+          parentSessionPath: session.parentSessionPath 
+        });
+      }
+    } catch (err) {
+      logger.debug("subsession", "load-session-list-error", { error: err instanceof Error ? err.message : String(err) });
     }
   }
 }

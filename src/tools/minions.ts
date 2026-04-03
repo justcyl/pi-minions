@@ -6,6 +6,7 @@ import type { ResultQueue } from "../queue.js";
 import type { AgentNode } from "../types.js";
 import { formatDuration, formatUsage } from "../render.js";
 import type { SubsessionManager } from "../subsessions/manager.js";
+import { getMinionHistory } from "../subsessions/observability.js";
 
 // Shared validation helpers
 
@@ -74,7 +75,7 @@ export async function executeSteering(
 
 // list_minions
 
-export function buildListMinionsText(tree: AgentTree, queue: ResultQueue, subsessionManager: SubsessionManager): string {
+export function buildListMinionsText(tree: AgentTree, queue: ResultQueue, _subsessionManager: SubsessionManager): string {
   const running = tree.getRunning();
   const pending = queue.getPending();
 
@@ -165,7 +166,9 @@ export function buildShowMinionText(tree: AgentTree, queue: ResultQueue, target:
 
   const lines: string[] = [];
   if (node) {
-    lines.push(`${node.name} (${node.id})`);
+    // Header with mode badge
+    const mode = node.detached ? "[bg]" : "[fg]";
+    lines.push(`${node.name} (${node.id}) ${mode}`);
     lines.push(`  Status: ${node.status}`);
     lines.push(`  Task: ${node.task}`);
 
@@ -178,6 +181,18 @@ export function buildShowMinionText(tree: AgentTree, queue: ResultQueue, target:
     const usageText = formatUsage(node.usage);
     lines.push(`  Usage: ${usageText || "N/A"}`);
     if (node.error) lines.push(`  Error: ${node.error}`);
+
+    // Include recent activity history
+    const history = getMinionHistory(node.id);
+    if (history.length > 0) {
+      lines.push(`  Recent activity:`);
+      history.forEach(msg => lines.push(`    ${msg}`));
+    }
+
+    // Suggest interactive view for live updates
+    if (node.status === "running") {
+      lines.push(`\n  Tip: Use '/minions show ${node.name}' for live activity stream`);
+    }
   }
   if (result) {
     if (!node) lines.push(`${result.name} (${result.id})`);

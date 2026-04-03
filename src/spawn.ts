@@ -31,7 +31,7 @@ function createTranscriptWriter(id: string, name: string, task: string) {
 
 // Callbacks for streaming progress
 export interface MinionCallbacks {
-  onToolActivity?: (activity: { type: "start" | "end"; toolName: string }) => void;
+  onToolActivity?: (activity: { type: "start" | "end"; toolName: string; args?: Record<string, unknown> }) => void;
   onToolOutput?: (toolName: string, delta: string) => void;
   onTextDelta?: (delta: string, fullText: string) => void;
   onTurnEnd?: (turnCount: number) => void;

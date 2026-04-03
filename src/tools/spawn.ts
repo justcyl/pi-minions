@@ -68,15 +68,19 @@ function resolveConfig(
 // Activity callbacks for tree updates
 function createActivityCallbacks(tree: AgentTree, id: string) {
   return {
-    onToolActivity: (activity: { type: "start" | "end"; toolName: string }) => {
-      if (activity.type === "start") tree.updateActivity(id, `→ ${activity.toolName}`);
+    onToolActivity: (activity: { type: "start" | "end"; toolName: string; args?: Record<string, unknown> }) => {
+      if (activity.type === "start") {
+        const desc = formatToolCall(activity.toolName, activity.args ?? {});
+        tree.updateActivity(id, `→ ${desc}`);
+      }
     },
-    onToolOutput: (toolName: string, delta: string) => {
-      const line = delta.trimEnd().split("\n").filter(Boolean).at(-1)?.slice(0, 80) ?? "";
-      if (line) tree.updateActivity(id, `${toolName}: ${line}`);
+    onToolOutput: (_toolName: string, delta: string) => {
+      const line = delta.trimEnd().split("\n").filter(Boolean).at(-1) ?? "";
+      if (line) tree.updateActivity(id, `← ${line}`);
     },
     onTextDelta: (_delta: string, fullText: string) => {
-      const preview = fullText.split("\n").filter(Boolean).at(-1)?.slice(0, 80) ?? "";
+      // Show full last line without truncation to avoid cutting sentences
+      const preview = fullText.split("\n").filter(Boolean).at(-1) ?? "";
       tree.updateActivity(id, preview);
     },
     onTurnEnd: (turnCount: number) => { tree.updateActivity(id, `turn ${turnCount}`); },
@@ -237,20 +241,21 @@ export function spawn(
         parentSessionPath: ctx.sessionManager?.getSessionFile() ?? undefined,
         onToolActivity: (activity) => {
           if (activity.type === "start") {
-            const desc = formatToolCall(activity.toolName, {});
+            const desc = formatToolCall(activity.toolName, activity.args ?? {});
             emitUpdate({ activity: `→ ${desc}` });
             tree.updateActivity(id, `→ ${desc}`);
           }
         },
         onToolOutput: (toolName, delta) => {
-          const line = delta.trimEnd().split("\n").filter(Boolean).at(-1)?.slice(0, 80) ?? "";
+          const line = delta.trimEnd().split("\n").filter(Boolean).at(-1) ?? "";
           if (line) {
             emitUpdate({ activity: `${toolName}: ${line}` });
             tree.updateActivity(id, `${toolName}: ${line}`);
           }
         },
         onTextDelta: (_delta, fullText) => {
-          const preview = fullText.split("\n").filter(Boolean).at(-1)?.slice(0, 80) ?? "";
+          // Show full last line without truncation to avoid cutting sentences
+          const preview = fullText.split("\n").filter(Boolean).at(-1) ?? "";
           emitUpdate({ activity: preview, finalOutput: preview });
           tree.updateActivity(id, preview);
         },

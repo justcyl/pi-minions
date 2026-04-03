@@ -118,7 +118,10 @@ export class AgentTree {
 
   updateActivity(id: string, activity: string): void {
     const node = this.nodes.get(id);
-    if (node) node.lastActivity = activity;
+    if (node) {
+      node.lastActivity = activity;
+      this.notify();
+    }
   }
 
   /** Mark a node as detached (moved to background) */

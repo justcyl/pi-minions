@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { buildFooterFactory } from "../src/footer.js";
 import { AgentTree } from "../src/tree.js";
-import { emptyUsage } from "../src/types.js";
 
 // Minimal theme stub that returns text as-is (no ANSI codes)
 const theme = {

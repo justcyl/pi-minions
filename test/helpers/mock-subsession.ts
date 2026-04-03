@@ -50,6 +50,21 @@ export class MockSubsessionManager {
     if (exitCode !== undefined) meta.exitCode = exitCode;
     if (error !== undefined) meta.error = error;
   }
+
+  getSessionPath(id: string): string | undefined {
+    const meta = this.metadata.get(id);
+    if (!meta) return undefined;
+    return `/mock/path/${meta.sessionId}.${meta.name}.jsonl`;
+  }
+
+  getMinionIdFromPath(sessionPath: string): string | undefined {
+    for (const [id, meta] of this.metadata) {
+      if (sessionPath.includes(meta.sessionId)) {
+        return id;
+      }
+    }
+    return undefined;
+  }
 }
 
 export class MockAgentSession {

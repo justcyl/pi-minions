@@ -1,15 +1,43 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseMinionArgs, createMinionsHandler } from "../../src/commands/minions.js";
 import { AgentTree } from "../../src/tree.js";
 import { ResultQueue } from "../../src/queue.js";
-import { SubsessionManager } from "../../src/subsessions/manager.js";
+import type { SubsessionManager } from "../../src/subsessions/manager.js";
+import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import { EventBus } from "../../src/subsessions/event-bus.js";
 
-function createMockSubsessionManager(sessions: Map<string, any> = new Map()) {
+// Mock the observability module
+vi.mock("../../src/subsessions/observability.js", () => ({
+  showMinionObservability: vi.fn(),
+  getMinionHistory: vi.fn().mockReturnValue([]),
+}));
+
+import { showMinionObservability } from "../../src/subsessions/observability.js";
+
+function createMockEventBus(): EventBus {
+  return new EventBus();
+}
+
+function createMockSubsessionManager(sessions: Map<string, any> = new Map()): SubsessionManager {
   return {
     getSession: vi.fn().mockImplementation((id: string) => sessions.get(id)),
+    getMetadata: vi.fn().mockImplementation((id: string) => ({
+      sessionId: id,
+      parentSession: "/mock/parent.jsonl",
+      name: `minion-${id}`,
+      task: "test task",
+      status: "running",
+      createdAt: Date.now(),
+    })),
+    getSessionPath: vi.fn().mockImplementation((id: string) => `/mock/path/${id}.jsonl`),
+    getMinionIdFromPath: vi.fn().mockImplementation((path: string) => {
+      if (path.includes("minion-")) {
+        return path.match(/minion-[^/]+/)?.[0];
+      }
+      return undefined;
+    }),
     updateStatus: vi.fn(),
     list: vi.fn().mockReturnValue([]),
-    getMetadata: vi.fn(),
     activeSessions: sessions,
   } as unknown as SubsessionManager;
 }
@@ -26,6 +54,21 @@ function mockSession() {
   };
 }
 
+function createMockContext(overrides?: Partial<ExtensionCommandContext>): ExtensionCommandContext {
+  return {
+    ui: {
+      notify: vi.fn(),
+    },
+    sessionManager: {
+      getSessionFile: vi.fn().mockReturnValue("/mock/parent.jsonl"),
+    } as unknown as ExtensionCommandContext["sessionManager"],
+    switchSession: vi.fn().mockResolvedValue({ cancelled: false }),
+    isIdle: vi.fn().mockReturnValue(true),
+    hasPendingMessages: vi.fn().mockReturnValue(false),
+    ...overrides,
+  } as unknown as ExtensionCommandContext;
+}
+
 describe("parseMinionArgs", () => {
   it("empty args defaults to list", () => {
     expect(parseMinionArgs("")).toEqual({ action: "list" });
@@ -37,6 +80,14 @@ describe("parseMinionArgs", () => {
 
   it("'show abc' returns show with target", () => {
     expect(parseMinionArgs("show abc")).toEqual({ action: "show", target: "abc" });
+  });
+
+  it("'s abc' returns show with target (shorthand)", () => {
+    expect(parseMinionArgs("s abc")).toEqual({ action: "show", target: "abc" });
+  });
+
+  it("'show' without target returns error", () => {
+    expect(parseMinionArgs("show")).toHaveProperty("error");
   });
 
   it("'bg abc' returns bg with target", () => {
@@ -58,10 +109,6 @@ describe("parseMinionArgs", () => {
     expect(parseMinionArgs("steer bob")).toHaveProperty("error");
   });
 
-  it("missing target returns error for show", () => {
-    expect(parseMinionArgs("show")).toHaveProperty("error");
-  });
-
   it("unknown subcommand returns error", () => {
     const result = parseMinionArgs("frobnicate abc");
     expect(result).toHaveProperty("error");
@@ -70,69 +117,191 @@ describe("parseMinionArgs", () => {
 
   it("handles whitespace", () => {
     expect(parseMinionArgs("   ")).toEqual({ action: "list" });
-    expect(parseMinionArgs("  show   abc  ")).toEqual({ action: "show", target: "abc" });
+    expect(parseMinionArgs("  bg   abc  ")).toEqual({ action: "bg", target: "abc" });
   });
 });
 
-function makeCtx() {
-  return {
-    isIdle: vi.fn().mockReturnValue(true),
-    hasPendingMessages: vi.fn().mockReturnValue(false),
-    ui: {
-      notify: vi.fn(),
-    },
-  } as any;
-}
-
-describe("createMinionsHandler — instantaneous path", () => {
-  it("list calls ctx.ui.notify directly (no LLM delegation)", async () => {
+describe("list action with no minions", () => {
+  it("shows info message when no minions are running", async () => {
     const tree = new AgentTree();
     const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-    const subsessionManager = createMockSubsessionManager(sessions);
-    const ctx = makeCtx();
-    
-    tree.add("a", "kevin", "task A");
-    
-    const handler = createMinionsHandler(tree, queue, subsessionManager);
+    const subsessionManager = createMockSubsessionManager();
+    const ctx = createMockContext();
+    const eventBus = createMockEventBus();
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
     await handler("list", ctx);
-    
+
     expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.stringContaining("kevin"),
+      "No active minions. Spawn one with /spawn or the spawn tool.",
       "info"
+    );
+    expect(showMinionObservability).not.toHaveBeenCalled();
+  });
+});
+
+describe("list action opens observability", () => {
+  let tree: AgentTree;
+  let queue: ResultQueue;
+  let subsessionManager: SubsessionManager;
+  let ctx: ExtensionCommandContext;
+  let eventBus: EventBus;
+
+  beforeEach(() => {
+    tree = new AgentTree();
+    queue = new ResultQueue();
+    subsessionManager = createMockSubsessionManager();
+    ctx = createMockContext();
+    eventBus = createMockEventBus();
+    vi.clearAllMocks();
+  });
+
+  it("opens observability for first minion alphabetically", async () => {
+    tree.add("id-zebra", "zebra", "test");
+    tree.add("id-alpha", "alpha", "test");
+    
+    vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    await handler("list", ctx);
+
+    expect(showMinionObservability).toHaveBeenCalledWith(
+      ctx,
+      tree,
+      eventBus,
+      "id-alpha",
+      expect.any(Function)
     );
   });
 
-  it("show calls ctx.ui.notify directly with minion details", async () => {
+  it("exits when user closes observability", async () => {
+    tree.add("id-test", "test", "test");
+    
+    vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    await handler("list", ctx);
+
+    expect(showMinionObservability).toHaveBeenCalledTimes(1);
+  });
+
+  it("exits when user presses back", async () => {
+    tree.add("id-test", "test", "test");
+    
+    vi.mocked(showMinionObservability).mockResolvedValue({ action: "back" });
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    await handler("list", ctx);
+
+    expect(showMinionObservability).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not switch parent session", async () => {
+    tree.add("id-test", "test", "test");
+    
+    vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    await handler("list", ctx);
+
+    expect(ctx.switchSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("show action opens specific minion", () => {
+  let tree: AgentTree;
+  let queue: ResultQueue;
+  let subsessionManager: SubsessionManager;
+  let ctx: ExtensionCommandContext;
+  let eventBus: EventBus;
+
+  beforeEach(() => {
+    tree = new AgentTree();
+    queue = new ResultQueue();
+    subsessionManager = createMockSubsessionManager();
+    ctx = createMockContext();
+    eventBus = createMockEventBus();
+    vi.clearAllMocks();
+  });
+
+  it("opens observability for specified minion by name", async () => {
+    tree.add("id-alpha", "alpha", "test");
+    tree.add("id-beta", "beta", "test");
+    
+    vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    await handler("show beta", ctx);
+
+    expect(showMinionObservability).toHaveBeenCalledWith(
+      ctx,
+      tree,
+      eventBus,
+      "id-beta",
+      expect.any(Function)
+    );
+  });
+
+  it("opens observability for specified minion by id", async () => {
+    tree.add("id-alpha", "alpha", "test");
+    
+    vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    await handler("show id-alpha", ctx);
+
+    expect(showMinionObservability).toHaveBeenCalledWith(
+      ctx,
+      tree,
+      eventBus,
+      "id-alpha",
+      expect.any(Function)
+    );
+  });
+
+  it("shows error when minion not found", async () => {
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    await handler("show nonexistent", ctx);
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      "Minion not found: nonexistent",
+      "error"
+    );
+    expect(showMinionObservability).not.toHaveBeenCalled();
+  });
+
+  it("supports 's' shorthand", async () => {
+    tree.add("id-test", "test", "test");
+    
+    vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    await handler("s test", ctx);
+
+    expect(showMinionObservability).toHaveBeenCalledWith(
+      ctx,
+      tree,
+      eventBus,
+      "id-test",
+      expect.any(Function)
+    );
+  });
+});
+
+describe("steer action injects message into running minion", () => {
+  it("calls session.steer with wrapped message", async () => {
     const tree = new AgentTree();
     const queue = new ResultQueue();
     const sessions = new Map<string, any>();
     const subsessionManager = createMockSubsessionManager(sessions);
-    const ctx = makeCtx();
-    
-    tree.add("a", "kevin", "task A");
-    
-    const handler = createMinionsHandler(tree, queue, subsessionManager);
-    await handler("show kevin", ctx);
-    
-    expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.stringContaining("kevin"),
-      "info"
-    );
-  });
-
-  it("steer calls session.steer directly (no LLM delegation)", async () => {
-    const tree = new AgentTree();
-    const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-    const subsessionManager = createMockSubsessionManager(sessions);
-    const ctx = makeCtx();
+    const ctx = createMockContext();
     
     const mockSessionObj = mockSession();
     tree.add("a", "kevin", "task A");
     sessions.set("a", mockSessionObj);
     
-    const handler = createMinionsHandler(tree, queue, subsessionManager);
+    const eventBus = createMockEventBus();
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
     await handler("steer kevin restart", ctx);
     
     expect(mockSessionObj.steer).toHaveBeenCalledWith(expect.stringContaining("[USER STEER]"));
@@ -142,33 +311,15 @@ describe("createMinionsHandler — instantaneous path", () => {
       "info"
     );
   });
-});
 
-describe("createMinionsHandler — error cases", () => {
-  it("show (unknown target) calls ctx.ui.notify as error", async () => {
+  it("shows error when minion not found", async () => {
     const tree = new AgentTree();
     const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-    const subsessionManager = createMockSubsessionManager(sessions);
-    const ctx = makeCtx();
+    const subsessionManager = createMockSubsessionManager();
+    const ctx = createMockContext();
     
-    const handler = createMinionsHandler(tree, queue, subsessionManager);
-    await handler("show nope", ctx);
-    
-    expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.any(String),
-      "error"
-    );
-  });
-
-  it("steer (not found) calls notify as error", async () => {
-    const tree = new AgentTree();
-    const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-    const subsessionManager = createMockSubsessionManager(sessions);
-    const ctx = makeCtx();
-    
-    const handler = createMinionsHandler(tree, queue, subsessionManager);
+    const eventBus = createMockEventBus();
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
     await handler("steer nope restart", ctx);
     
     expect(ctx.ui.notify).toHaveBeenCalledWith(
@@ -177,17 +328,17 @@ describe("createMinionsHandler — error cases", () => {
     );
   });
 
-  it("steer (not running) calls notify as info containing 'not running'", async () => {
+  it("shows info when minion not running", async () => {
     const tree = new AgentTree();
     const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-    const subsessionManager = createMockSubsessionManager(sessions);
-    const ctx = makeCtx();
+    const subsessionManager = createMockSubsessionManager();
+    const ctx = createMockContext();
     
     tree.add("a", "kevin", "task A");
     tree.updateStatus("a", "completed", 0);
     
-    const handler = createMinionsHandler(tree, queue, subsessionManager);
+    const eventBus = createMockEventBus();
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
     await handler("steer kevin restart", ctx);
     
     expect(ctx.ui.notify).toHaveBeenCalledWith(
@@ -196,17 +347,16 @@ describe("createMinionsHandler — error cases", () => {
     );
   });
 
-  it("steer (no session) calls notify as error", async () => {
+  it("shows error when no active session", async () => {
     const tree = new AgentTree();
     const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-    const subsessionManager = createMockSubsessionManager(sessions);
-    const ctx = makeCtx();
+    const subsessionManager = createMockSubsessionManager();
+    const ctx = createMockContext();
     
     tree.add("a", "kevin", "task A");
-    // No session in sessions map
     
-    const handler = createMinionsHandler(tree, queue, subsessionManager);
+    const eventBus = createMockEventBus();
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
     await handler("steer kevin restart", ctx);
     
     expect(ctx.ui.notify).toHaveBeenCalledWith(

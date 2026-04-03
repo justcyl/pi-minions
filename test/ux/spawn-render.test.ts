@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createTestHarness } from "../helpers/index.js";
-
 import { renderResult } from "../../src/render.js";
-import { Text } from "@mariozechner/pi-tui";
 
 describe("spawn rendering", () => {
   it("renders spawn tool progress", async () => {

@@ -8,17 +8,20 @@ import { ListAgentsParams, listAgents } from "./tools/list-agents.js";
 import {
   ListMinionsParams, listMinions,
   SteerMinionParams, steerMinion,
-  ShowMinionParams, showMinion,
+  ShowMinionParams,
+  showMinion,
 } from "./tools/minions.js";
 import { createSpawnHandler } from "./commands/spawn.js";
 import { createHaltHandler } from "./commands/halt.js";
 import { createMinionsHandler } from "./commands/minions.js";
 import { renderCall, renderResult } from "./render.js";
 import { buildFooterFactory } from "./footer.js";
-import { createStatusTracker, MINIONS_STATUS_KEY } from "./status.js";
+import { createStatusTracker } from "./status.js";
 import { logger, LOG_FILE } from "./logger.js";
 import { SubsessionManager } from "./subsessions/manager.js";
+import { EventBus } from "./subsessions/event-bus.js";
 import { getTempSessionPath } from "./subsessions/paths.js";
+import { minionSpawnRenderer } from "./renderers/minion-spawn.js";
 
 export default function (pi: ExtensionAPI): void {
   logger.debug("extension", "loaded", { logFile: LOG_FILE });
@@ -117,6 +120,9 @@ export default function (pi: ExtensionAPI): void {
     execute: showMinion(tree, queue),
   });
 
+  // Register custom message renderer for minion spawn status
+  pi.registerMessageRenderer("minion-spawn", minionSpawnRenderer);
+
   pi.registerTool({
     name: "steer_minion",
     label: "Steer Minion",
@@ -135,10 +141,10 @@ export default function (pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("minions", {
-    description: "Manage minions: /minions [list|show|bg|steer] [id|name] [message]",
+    description: "Manage minions: /minions [list|bg|steer] [id|name] [message]",
     handler: (args, ctx) => {
       if (!subsessionManager) throw new Error("SubsessionManager not initialized");
-      return createMinionsHandler(tree, queue, subsessionManager)(args, ctx);
+      return createMinionsHandler(tree, queue, subsessionManager, eventBus)(args, ctx);
     },
   });
 
@@ -149,6 +155,8 @@ export default function (pi: ExtensionAPI): void {
       return createHaltHandler(tree, subsessionManager)(args, ctx);
     },
   });
+
+  // Note: prototype view removed - observability approach under reconsideration
 
   // Minion status tracking (background and foreground)
   // Status tracker is initialized after subsessionManager in session_start
@@ -163,6 +171,9 @@ export default function (pi: ExtensionAPI): void {
     statusTracker?.refresh();
   });
 
+  // EventBus for minion progress streaming
+  const eventBus = new EventBus();
+
   pi.on("session_start", (_event, ctx) => {
     cachedCtx = ctx;
     cachedModel = ctx.model;
@@ -170,7 +181,7 @@ export default function (pi: ExtensionAPI): void {
 
     // Create subsession manager for file-based minion sessions (always use file-based)
     const parentSessionPath = ctx.sessionManager?.getSessionFile() ?? getTempSessionPath(ctx.cwd);
-    subsessionManager = new SubsessionManager(ctx.cwd, parentSessionPath);
+    subsessionManager = new SubsessionManager(ctx.cwd, parentSessionPath, eventBus);
     logger.debug("session", "subsession-manager-created", {
       cwd: ctx.cwd,
       parentSession: parentSessionPath,
