@@ -22,6 +22,7 @@
 - [ ] add `/minions version` command to quickly see the running extension version
 - [ ] bring background minions to foreground with queue
 - [ ] bug: do not send a user message for background minion result, the LLM thinks it is from the user and evaluates as a user message which can lead to confusion
+- [ ] delegation reminder is very in consistent and there is no feedback when it is received
 
 ### observability
 - [x] simple widget to see background minion count
@@ -36,13 +37,15 @@
 - [x] /minions commands should work instantaneously so that they can influence foreground minions and display information about foreground minions when the parent sessions is blocked
 - [x] the background minion count widget can use our existing custom footer widget
 - [x] replace the background hint on foreground minions in the TUI from the banner to the footer similar to the background minion count
+- [x] add token usage to the foreground minion banner
+- [x] token usage is not shows on a foreground minion banner until it has completed because it is not available or updated while the minion is running
+- [x] minion token usage to cost is not available
 - [ ] TUI dashboard to view full conversation and activity with keyboard hotkeys
 - [ ] minion history/audit trail across sessions
 - [ ] visual minion tree/hierarchy display
 - [ ] export minion transcripts and results to files
 - [ ] performance metrics and analytics dashboard
 - [ ] persistent steer history widget in TUI (notify toasts are transient, multiple steers lose history)
-- [ ] add token usage to the foreground minion banner
 - [ ] add custom agent names next to the minion names if relevant, with support for a color/colour field in frontmatter
 
 ### event bus & session management

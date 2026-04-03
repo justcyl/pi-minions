@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createMockSession, type MockSessionConfig } from "./helpers/mock-session.js";
+import { AgentTree } from "../src/tree.js";
 
 // Mock the SDK — swap in a controllable session per test
 
@@ -166,5 +167,48 @@ describe("halt via abort signal", () => {
 
     expect(result.exitCode).toBe(1);
     expect(mock.aborted).toBe(true);
+  });
+});
+
+// Live usage propagation
+
+describe("live usage propagation", () => {
+  it("fires onUsageUpdate after each turn with stats from the session", async () => {
+    setup({ totalTurns: 3, turnDelayMs: 1 });
+    const usageUpdates: any[] = [];
+    await runMinionSession(makeConfig(), "do something", {
+      ...baseOpts,
+      onUsageUpdate: (u) => usageUpdates.push(u),
+    });
+    // One call per turn (3 turns)
+    expect(usageUpdates.length).toBe(3);
+    // getSessionStats() in the mock returns input:100, output:50, cost:0.001
+    expect(usageUpdates[0]!.input).toBe(100);
+    expect(usageUpdates[0]!.output).toBe(50);
+    expect(usageUpdates[0]!.cost).toBe(0.001);
+  });
+
+  it("updates the tree node usage after each turn when tree is provided", async () => {
+    setup({ totalTurns: 2, turnDelayMs: 1 });
+    const tree = new AgentTree();
+    const id = "live-usage-node";
+    tree.add(id, "test", "do something");
+
+    await runMinionSession(makeConfig(), "do something", { ...baseOpts, id, tree });
+
+    const node = tree.get(id)!;
+    expect(node.usage.input).toBe(100);
+    expect(node.usage.output).toBe(50);
+    expect(node.usage.cost).toBe(0.001);
+  });
+
+  it("does not call onUsageUpdate when the session has zero turns", async () => {
+    setup({ totalTurns: 0, turnDelayMs: 1 });
+    const usageUpdates: any[] = [];
+    await runMinionSession(makeConfig(), "do something", {
+      ...baseOpts,
+      onUsageUpdate: (u) => usageUpdates.push(u),
+    });
+    expect(usageUpdates).toHaveLength(0);
   });
 });

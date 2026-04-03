@@ -28,7 +28,8 @@ function createDelegationHint(toolCallCount: number): string {
   return "\n\nDELEGATION REMINDER: You have made: " + toolCallCount +
         " tool calls. The pi-minions extension is active and provides tools for parallel execution and work delegation." +
         "\nDELEGATE independent subtasks to minions for faster, isolated processing using the `spawn` and `spawn_bg` tools." +
-        "\nUSE any delegation skills you have available through the system.\n";
+        "\nUSE any delegation skills you have available through the system.\n" +
+        "\nALWAYS acknowledge this reminder when you receive it and review your delegation strategy before making further tool calls.\n";
 }
 
 function buildPromptFromContext(messages: AgentMessage[]): string {

@@ -84,6 +84,9 @@ function createActivityCallbacks(tree: AgentTree, id: string) {
       tree.updateActivity(id, preview);
     },
     onTurnEnd: (turnCount: number) => { tree.updateActivity(id, `turn ${turnCount}`); },
+    onUsageUpdate: (usage: { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number }) => {
+      tree.updateUsage(id, usage);
+    },
   };
 }
 
@@ -180,6 +183,7 @@ export function spawn(
     let lastActivity: string | undefined;
     let lastOutput = "";
     let spinnerFrame = 0;
+    const resolvedModel = params.model ?? config.model ?? ctx.model?.id;
 
     const emitUpdate = (partial?: Partial<SpawnToolDetails>) => {
       if (partial?.activity !== undefined) lastActivity = partial.activity;
@@ -191,8 +195,8 @@ export function spawn(
         details: {
           id, name, agentName: params.agent ?? config.name, task: params.task,
           status: node?.status ?? "running",
-          usage: node?.usage ?? emptyUsage(),
-          model: params.model ?? config.model,
+          usage: { ...(node?.usage ?? emptyUsage()) },
+          model: resolvedModel,
           finalOutput: lastOutput,
           activity: lastActivity,
           spinnerFrame,
@@ -262,6 +266,10 @@ export function spawn(
         onTurnEnd: (turnCount) => {
           tree.updateActivity(id, `turn ${turnCount}`);
         },
+        onUsageUpdate: (partial) => {
+          tree.updateUsage(id, partial);
+          emitUpdate();
+        },
         // Activity callbacks are defined above inline
       });
 
@@ -286,7 +294,7 @@ export function spawn(
           details: {
             id, name, agentName: params.agent ?? config.name, task: params.task,
             status: "running", usage: tree.get(id)?.usage ?? emptyUsage(),
-            model: params.model ?? config.model,
+            model: resolvedModel,
             finalOutput: `Moved to background by user`,
           },
         };
@@ -313,7 +321,7 @@ export function spawn(
       const details: SpawnToolDetails = {
         id, name, agentName: params.agent ?? config.name, task: params.task,
         status, usage: node?.usage ?? result.usage,
-        model: params.model ?? config.model,
+        model: resolvedModel,
         finalOutput: result.finalOutput,
       };
 
@@ -352,6 +360,7 @@ export function spawnBg(
     const id = generateId();
     const name = pickMinionName(tree, id);
     const config = resolveConfig(params, name, ctx.cwd);
+    const resolvedModel = params.model ?? config.model ?? ctx.model?.id;
     logger.info("spawn:tool", "start-bg", { id, name, agent: params.agent ?? "ephemeral", task: params.task });
 
     tree.add(id, name, params.task);
@@ -383,7 +392,7 @@ export function spawnBg(
       details: {
         id, name, agentName: params.agent ?? config.name, task: params.task,
         status: "running", usage: emptyUsage(),
-        model: params.model ?? config.model,
+        model: resolvedModel,
         finalOutput: `Spawned in background`,
       },
     };

@@ -310,6 +310,92 @@ describe("SubsessionManager", () => {
     });
   });
 
+  describe("usage update on turn end", () => {
+    it("calls onUsageUpdate with stats from getSessionStats when session emits turn_end", async () => {
+      let capturedSubscriber: ((event: any) => void) | undefined;
+
+      const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
+      vi.mocked(createAgentSession).mockImplementationOnce(async () => ({
+        session: {
+          subscribe: (cb: (event: any) => void) => { capturedSubscriber = cb; return () => {}; },
+          abort: vi.fn(),
+          prompt: vi.fn().mockResolvedValue(undefined),
+          state: { messages: [] },
+          getSessionStats: vi.fn().mockReturnValue({
+            tokens: { input: 200, output: 80, cacheRead: 10, cacheWrite: 5, total: 290 },
+            cost: 0.005,
+          }),
+        },
+      }) as any);
+
+      const onUsageUpdate = vi.fn();
+      await manager.create({
+        id: "usage-test-id",
+        name: "usage-minion",
+        task: "usage task",
+        config: {
+          name: "test",
+          description: "Test agent",
+          systemPrompt: "test",
+          source: "ephemeral",
+          filePath: "",
+        },
+        spawnedBy: "tc",
+        cwd: tempDir,
+        modelRegistry: {} as any,
+        onUsageUpdate,
+      });
+
+      expect(capturedSubscriber).toBeDefined();
+      capturedSubscriber!({ type: "turn_end" });
+
+      expect(onUsageUpdate).toHaveBeenCalledWith({
+        input: 200,
+        output: 80,
+        cacheRead: 10,
+        cacheWrite: 5,
+        cost: 0.005,
+      });
+    });
+
+    it("does not throw when onUsageUpdate is not provided and turn_end fires", async () => {
+      let capturedSubscriber: ((event: any) => void) | undefined;
+
+      const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
+      vi.mocked(createAgentSession).mockImplementationOnce(async () => ({
+        session: {
+          subscribe: (cb: (event: any) => void) => { capturedSubscriber = cb; return () => {}; },
+          abort: vi.fn(),
+          prompt: vi.fn().mockResolvedValue(undefined),
+          state: { messages: [] },
+          getSessionStats: vi.fn().mockReturnValue({
+            tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+            cost: 0.001,
+          }),
+        },
+      }) as any);
+
+      await manager.create({
+        id: "no-cb-test",
+        name: "test-minion",
+        task: "test",
+        config: {
+          name: "test",
+          description: "Test",
+          systemPrompt: "test",
+          source: "ephemeral",
+          filePath: "",
+        },
+        spawnedBy: "tc",
+        cwd: tempDir,
+        modelRegistry: {} as any,
+        // No onUsageUpdate
+      });
+
+      expect(() => capturedSubscriber?.({ type: "turn_end" })).not.toThrow();
+    });
+  });
+
   describe("tracking parent session relationship", () => {
     it("remembers parent session path for returning from minion", () => {
       // Given a minion session with parent relationship

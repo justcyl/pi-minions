@@ -347,3 +347,98 @@ describe("spawnBg", () => {
     await new Promise((r) => setTimeout(r, 10));
   });
 });
+
+// Live usage in banner updates
+
+describe("usage — live banner updates while running", () => {
+  it("emitted update carries non-zero usage when onUsageUpdate fires mid-session", async () => {
+    vi.mocked(runMinionSession).mockImplementation(async (_config, _task, opts: any) => {
+      opts.onUsageUpdate?.({ input: 500, output: 200, cacheRead: 50, cacheWrite: 10, cost: 0.003 });
+      return { exitCode: 0, finalOutput: "done", usage: emptyUsage() };
+    });
+
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    const updates: any[] = [];
+    await spawn(tree, queue, pi, subsessionManager)(
+      "tc", { agent: "scout", task: "t" },
+      undefined, (u: any) => updates.push(u), createCtx(),
+    );
+
+    const liveUpdate = updates.find((u) => (u.details?.usage?.input ?? 0) > 0);
+    expect(liveUpdate).toBeDefined();
+    expect(liveUpdate!.details.usage.input).toBe(500);
+    expect(liveUpdate!.details.usage.cost).toBe(0.003);
+  });
+
+  it("zero usage shown before any turn completes", async () => {
+    // Session starts but never fires onUsageUpdate (not yet at turn boundary)
+    vi.mocked(runMinionSession).mockImplementation(async (_config, _task, _opts: any) => {
+      return { exitCode: 0, finalOutput: "done", usage: emptyUsage() };
+    });
+
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    const updates: any[] = [];
+    await spawn(tree, queue, pi, subsessionManager)(
+      "tc", { agent: "scout", task: "t" },
+      undefined, (u: any) => updates.push(u), createCtx(),
+    );
+
+    // The very first update (spinner tick at start) must show zero usage
+    expect(updates[0]?.details?.usage?.input).toBe(0);
+  });
+});
+
+// Model resolution in banner
+
+describe("model resolution in banner", () => {
+  it("shows parent context model id for ephemeral agents with no configured model", async () => {
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    const updates: any[] = [];
+    await spawn(tree, queue, pi, subsessionManager)(
+      "tc", { task: "t" },
+      undefined, (u: any) => updates.push(u),
+      { ...createCtx(), model: { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" } } as any,
+    );
+    expect(updates[0]?.details?.model).toBe("claude-sonnet-4-5");
+  });
+
+  it("explicit model param takes precedence over context model", async () => {
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    const updates: any[] = [];
+    await spawn(tree, queue, pi, subsessionManager)(
+      "tc", { task: "t", model: "claude-haiku-4-5" },
+      undefined, (u: any) => updates.push(u),
+      { ...createCtx(), model: { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" } } as any,
+    );
+    expect(updates[0]?.details?.model).toBe("claude-haiku-4-5");
+  });
+
+  it("model is shown in spawnBg details when context model is set", async () => {
+    let sessionResolve!: (v: any) => void;
+    vi.mocked(runMinionSession).mockReturnValue(new Promise((r) => { sessionResolve = r; }));
+
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    const updates: any[] = [];
+    await spawnBg(tree, queue, pi, subsessionManager)(
+      "tc", { task: "bg" },
+      undefined, (u: any) => updates.push(u),
+      { ...createCtx(), model: { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" } } as any,
+    );
+
+    expect(updates[0]?.details?.model).toBe("claude-sonnet-4-5");
+
+    sessionResolve({ exitCode: 0, finalOutput: "done", usage: emptyUsage() });
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  it("model is undefined in banner when neither param, config, nor context model is set", async () => {
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    const updates: any[] = [];
+    // ctx.model is undefined (default createCtx)
+    await spawn(tree, queue, pi, subsessionManager)(
+      "tc", { task: "t" },
+      undefined, (u: any) => updates.push(u), createCtx(),
+    );
+    expect(updates[0]?.details?.model).toBeUndefined();
+  });
+});

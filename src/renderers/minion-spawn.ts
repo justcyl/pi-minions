@@ -27,8 +27,6 @@ export const minionSpawnRenderer: MessageRenderer<SpawnToolDetails> = (
   const isAborted = data.status === "aborted";
   const isError = data.status === "failed";
 
-  logger.debug("render", "minion spawn update", { name: data.name, id: data.id, status: data.status, activity: data.activity, usage: data.usage });
-
   // Status icon and color
   let icon: string;
   let statusColor: "accent" | "warning" | "error" | "success" | "text" | "muted" | "dim";
@@ -56,13 +54,13 @@ export const minionSpawnRenderer: MessageRenderer<SpawnToolDetails> = (
   // Add usage
   const usage = formatUsage(data.usage, data.model);
   if (usage) {
-    header += ` ${theme.fg("muted", `— ${usage}`)}`;
+    header += `  ${theme.fg("muted", `—  ${usage}`)}`;
   }
 
   // Activity line (if running)
   if (isRunning && data.activity) {
     const activity = theme.fg("dim", `  ╰  ${data.activity ?? "thinking…"}`);
-    header += `\n${activity}`;
+    header += `\n${theme.fg("dim", `  │`)}\n${activity}`;
   }
 
   // Expanded output preview

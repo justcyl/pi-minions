@@ -122,6 +122,20 @@ export class SubsessionManager {
       if (event.type === "turn_end") {
         turnCount++;
         options.onTurnEnd?.(turnCount);
+        if (options.onUsageUpdate) {
+          try {
+            const stats = session.getSessionStats();
+            options.onUsageUpdate({
+              input: stats.tokens.input,
+              output: stats.tokens.output,
+              cacheRead: stats.tokens.cacheRead,
+              cacheWrite: stats.tokens.cacheWrite,
+              cost: stats.cost,
+            });
+          } catch {
+            // getSessionStats may not be available in all states
+          }
+        }
       }
       if (event.type === "agent_end" && !completed) {
         completed = true;

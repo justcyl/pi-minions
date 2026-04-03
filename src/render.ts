@@ -4,6 +4,7 @@ import { Text } from "@mariozechner/pi-tui";
 import type { UsageStats } from "./types.js";
 import type { SpawnToolDetails } from "./tools/spawn.js";
 import { minionSpawnRenderer } from "./renderers/minion-spawn.js";
+import { logger } from "./logger.js";
 
 // Formatting helpers
 

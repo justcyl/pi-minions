@@ -35,6 +35,7 @@ export interface MinionCallbacks {
   onToolOutput?: (toolName: string, delta: string) => void;
   onTextDelta?: (delta: string, fullText: string) => void;
   onTurnEnd?: (turnCount: number) => void;
+  onUsageUpdate?: (usage: { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number }) => void;
 }
 
 /**
@@ -139,6 +140,11 @@ export async function runMinionSession(
           tree?.updateActivity(id, preview);
 
           opts.onTextDelta?.(delta, fullText);
+        },
+
+        onUsageUpdate: (partial) => {
+          tree?.updateUsage(id, partial);
+          opts.onUsageUpdate?.(partial);
         },
 
         onTurnEnd: (count) => {
