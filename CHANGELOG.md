@@ -1,5 +1,12 @@
 # [oo] pi-minion Changelog
 
+## [Unreleased]
+
+## [0.9.0] - 2026-04-04
+
+- feat: add `/minions [help|version|changelog]` subcommands
+- fix: `/minions list` now shows available agent types
+
 ## [0.8.1] - 2026-04-04
 
 - chore: add Biome linter with zero-warning enforcement and `task style` command
