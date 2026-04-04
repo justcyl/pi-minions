@@ -23,6 +23,7 @@
 - [ ] bring background minions to foreground with queue
 - [ ] bug: do not send a user message for background minion result, the LLM thinks it is from the user and evaluates as a user message which can lead to confusion
 - [ ] delegation reminder is very in consistent and there is no feedback when it is received
+- [x] add `task style` command with Biome linter/formatter (enforces clean codebase with zero warnings)
 
 ### observability
 - [x] simple widget to see background minion count
@@ -47,6 +48,7 @@
 - [ ] performance metrics and analytics dashboard
 - [ ] persistent steer history widget in TUI (notify toasts are transient, multiple steers lose history)
 - [ ] add custom agent names next to the minion names if relevant, with support for a color/colour field in frontmatter
+- [ ] [critical bug]: scrollback/viewport lock with parallel foreground minions that renders beyond the viewport — TUI full re-render storm
 
 ### event bus & session management
 - [ ] `ResultQueue.onChange()` is never subscribed — status bar does not refresh when a background minion delivers its result

@@ -1,18 +1,22 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import {
   createAgentSession,
+  createCodingTools,
   DefaultResourceLoader,
   SessionManager,
   SettingsManager,
-  createCodingTools,
 } from "@mariozechner/pi-coding-agent";
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
-import type { MinionSessionMetadata, MinionSessionHandle, CreateMinionSessionOptions } from "./types.js";
 import { logger } from "../logger.js";
 import type { EventBus } from "./event-bus.js";
 import { MINION_COMPLETE_CHANNEL, MINION_PROGRESS_CHANNEL } from "./event-bus.js";
 import { getMinionsDir } from "./paths.js";
+import type {
+  CreateMinionSessionOptions,
+  MinionSessionHandle,
+  MinionSessionMetadata,
+} from "./types.js";
 
 export class SubsessionManager {
   private activeSessions = new Map<string, AgentSession>();
@@ -22,7 +26,7 @@ export class SubsessionManager {
   constructor(
     private cwd: string,
     private parentSessionPath: string,
-    public readonly eventBus?: EventBus
+    public readonly eventBus?: EventBus,
   ) {}
 
   /** Emit progress events via EventBus for parent to receive */
@@ -31,7 +35,17 @@ export class SubsessionManager {
   }
 
   async create(options: CreateMinionSessionOptions): Promise<MinionSessionHandle> {
-    const { id, name, task, config, spawnedBy, modelRegistry, parentModel, parentSystemPrompt, signal } = options;
+    const {
+      id,
+      name,
+      task,
+      config,
+      spawnedBy,
+      modelRegistry,
+      parentModel,
+      parentSystemPrompt,
+      signal,
+    } = options;
 
     // Create minions directory
     const minionsDir = getMinionsDir(this.cwd);
@@ -71,11 +85,11 @@ export class SubsessionManager {
       systemPromptOverride: parentSystemPrompt
         ? () => parentSystemPrompt
         : config.systemPrompt
-        ? () => config.systemPrompt
-        : undefined,
+          ? () => config.systemPrompt
+          : undefined,
       extensionsOverride: (base) => ({
         ...base,
-        extensions: base.extensions.filter(ext => !ext.resolvedPath.includes("pi-minions")),
+        extensions: base.extensions.filter((ext) => !ext.resolvedPath.includes("pi-minions")),
       }),
     });
     await loader.reload();
@@ -105,14 +119,19 @@ export class SubsessionManager {
       this.emitProgress(id, event);
 
       if (event.type === "tool_execution_start") {
-        const args = (event as any).args as Record<string, unknown> | undefined;
-        options.onToolActivity?.({ type: "start", toolName: event.toolName, args });
+        const toolEvent = event as { args?: Record<string, unknown> };
+        options.onToolActivity?.({
+          type: "start",
+          toolName: event.toolName,
+          args: toolEvent.args,
+        });
       }
       if (event.type === "tool_execution_end") {
         options.onToolActivity?.({ type: "end", toolName: event.toolName });
       }
       if (event.type === "tool_execution_update" && options.onToolOutput) {
-        const fullText: string = (event as any).partialResult?.content?.[0]?.text ?? "";
+        const toolEvent = event as { partialResult?: { content?: Array<{ text?: string }> } };
+        const fullText: string = toolEvent.partialResult?.content?.[0]?.text ?? "";
         options.onToolOutput(event.toolName, fullText);
       }
       if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
@@ -142,7 +161,11 @@ export class SubsessionManager {
         const exitCode = 0; // Success - agent_end without error
         this.updateStatus(id, "completed", exitCode);
         options.onComplete?.({ exitCode, output: currentFullText });
-        this.eventBus?.emit(MINION_COMPLETE_CHANNEL, { id, exitCode, output: currentFullText });
+        this.eventBus?.emit(MINION_COMPLETE_CHANNEL, {
+          id,
+          exitCode,
+          output: currentFullText,
+        });
       }
     });
 
@@ -157,14 +180,22 @@ export class SubsessionManager {
         this.updateStatus(id, "aborted");
         completed = true;
         options.onComplete?.({ exitCode: 1, output: currentFullText });
-        this.eventBus?.emit(MINION_COMPLETE_CHANNEL, { id, exitCode: 1, output: currentFullText });
+        this.eventBus?.emit(MINION_COMPLETE_CHANNEL, {
+          id,
+          exitCode: 1,
+          output: currentFullText,
+        });
       };
       if (signal.aborted) {
         session.abort();
         this.updateStatus(id, "aborted");
         completed = true;
         options.onComplete?.({ exitCode: 1, output: currentFullText });
-        this.eventBus?.emit(MINION_COMPLETE_CHANNEL, { id, exitCode: 1, output: currentFullText });
+        this.eventBus?.emit(MINION_COMPLETE_CHANNEL, {
+          id,
+          exitCode: 1,
+          output: currentFullText,
+        });
       } else {
         signal.addEventListener("abort", onAbort, { once: true });
         abortCleanup = () => signal.removeEventListener("abort", onAbort);
@@ -180,28 +211,40 @@ export class SubsessionManager {
     };
 
     // Start the session with the initial task
-    session.prompt(task).then(() => {
-      // Session completed naturally
-      if (!completed) {
-        completed = true;
-        const exitCode = signal?.aborted ? 1 : 0;
-        const status = signal?.aborted ? "aborted" : "completed";
-        this.updateStatus(id, status, exitCode);
-        options.onComplete?.({ exitCode, output: currentFullText });
-        this.eventBus?.emit(MINION_COMPLETE_CHANNEL, { id, exitCode, output: currentFullText });
-      }
-      cleanup();
-    }).catch((err) => {
-      // Session failed
-      if (!completed) {
-        completed = true;
-        const error = err instanceof Error ? err.message : String(err);
-        this.updateStatus(id, "failed", 1, error);
-        options.onComplete?.({ exitCode: 1, output: currentFullText });
-        this.eventBus?.emit(MINION_COMPLETE_CHANNEL, { id, exitCode: 1, output: currentFullText, error });
-      }
-      cleanup();
-    });
+    session
+      .prompt(task)
+      .then(() => {
+        // Session completed naturally
+        if (!completed) {
+          completed = true;
+          const exitCode = signal?.aborted ? 1 : 0;
+          const status = signal?.aborted ? "aborted" : "completed";
+          this.updateStatus(id, status, exitCode);
+          options.onComplete?.({ exitCode, output: currentFullText });
+          this.eventBus?.emit(MINION_COMPLETE_CHANNEL, {
+            id,
+            exitCode,
+            output: currentFullText,
+          });
+        }
+        cleanup();
+      })
+      .catch((err) => {
+        // Session failed
+        if (!completed) {
+          completed = true;
+          const error = err instanceof Error ? err.message : String(err);
+          this.updateStatus(id, "failed", 1, error);
+          options.onComplete?.({ exitCode: 1, output: currentFullText });
+          this.eventBus?.emit(MINION_COMPLETE_CHANNEL, {
+            id,
+            exitCode: 1,
+            output: currentFullText,
+            error,
+          });
+        }
+        cleanup();
+      });
 
     logger.debug("subsession", "created", { id, name, path: actualPath });
 
@@ -217,7 +260,11 @@ export class SubsessionManager {
           completed = true;
           this.updateStatus(id, "aborted");
           options.onComplete?.({ exitCode: 1, output: currentFullText });
-          this.eventBus?.emit(MINION_COMPLETE_CHANNEL, { id, exitCode: 1, output: currentFullText });
+          this.eventBus?.emit(MINION_COMPLETE_CHANNEL, {
+            id,
+            exitCode: 1,
+            output: currentFullText,
+          });
         }
         cleanup();
       },
@@ -233,7 +280,7 @@ export class SubsessionManager {
     // Try to read from disk
     const minionsDir = getMinionsDir(this.cwd);
     const files = this.listSessionFiles(minionsDir);
-    
+
     for (const file of files) {
       // Read metadata and check sessionId (filenames are timestamp-based)
       const metadata = this.readMetadataFile(join(minionsDir, file));
@@ -273,19 +320,34 @@ export class SubsessionManager {
   getMinionIdFromPath(sessionPath: string): string | undefined {
     logger.debug("subsession", "getMinionIdFromPath-start", { sessionPath });
     const minionsDir = getMinionsDir(this.cwd);
-    logger.debug("subsession", "checking-minions-dir", { sessionPath, minionsDir, startsWith: sessionPath.startsWith(minionsDir) });
+    logger.debug("subsession", "checking-minions-dir", {
+      sessionPath,
+      minionsDir,
+      startsWith: sessionPath.startsWith(minionsDir),
+    });
     if (!sessionPath.startsWith(minionsDir)) {
-      logger.debug("subsession", "not-minions-dir", { sessionPath, minionsDir });
+      logger.debug("subsession", "not-minions-dir", {
+        sessionPath,
+        minionsDir,
+      });
       return undefined;
     }
     // Read metadata to get the session ID
     const metadata = this.readMetadataFile(sessionPath);
-    logger.debug("subsession", "read-metadata-result", { sessionPath, hasMetadata: !!metadata });
+    logger.debug("subsession", "read-metadata-result", {
+      sessionPath,
+      hasMetadata: !!metadata,
+    });
     if (metadata) {
-      logger.debug("subsession", "extracted-id", { sessionPath, id: metadata.sessionId });
+      logger.debug("subsession", "extracted-id", {
+        sessionPath,
+        id: metadata.sessionId,
+      });
       return metadata.sessionId;
     }
-    logger.debug("subsession", "no-metadata-returning-undefined", { sessionPath });
+    logger.debug("subsession", "no-metadata-returning-undefined", {
+      sessionPath,
+    });
     return undefined;
   }
 
@@ -293,14 +355,20 @@ export class SubsessionManager {
   getSessionPath(id: string): string | undefined {
     const minionsDir = getMinionsDir(this.cwd);
     const files = this.listSessionFiles(minionsDir);
-    logger.debug("subsession", "getSessionPath", { id, fileCount: files.length });
-    
+    logger.debug("subsession", "getSessionPath", {
+      id,
+      fileCount: files.length,
+    });
+
     for (const file of files) {
       // Check if file contains the minion ID by reading metadata
       const filePath = join(minionsDir, file);
       const metadata = this.readMetadataFile(filePath);
       if (metadata?.sessionId === id) {
-        logger.debug("subsession", "found-session-path", { id, path: filePath });
+        logger.debug("subsession", "found-session-path", {
+          id,
+          path: filePath,
+        });
         return filePath;
       }
     }
@@ -313,16 +381,21 @@ export class SubsessionManager {
     // This is used when we're in a minion session to get its metadata
     const metadata = this.list();
     // Return the most recently created running minion as current
-    return metadata.find(m => m.status === "running");
+    return metadata.find((m) => m.status === "running");
   }
 
-  updateStatus(id: string, status: MinionSessionMetadata["status"], exitCode?: number, error?: string): void {
+  updateStatus(
+    id: string,
+    status: MinionSessionMetadata["status"],
+    exitCode?: number,
+    error?: string,
+  ): void {
     const metadata = this.metadataCache.get(id) ?? this.getMetadata(id);
     if (metadata) {
       metadata.status = status;
       if (exitCode !== undefined) metadata.exitCode = exitCode;
       if (error !== undefined) metadata.error = error;
-      
+
       // Find the session file and update its metadata
       const minionsDir = getMinionsDir(this.cwd);
       const files = this.listSessionFiles(minionsDir);
@@ -334,7 +407,7 @@ export class SubsessionManager {
           break;
         }
       }
-      
+
       this.metadataCache.set(id, metadata);
     }
   }
@@ -359,7 +432,10 @@ export class SubsessionManager {
       writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
       logger.debug("subsession", "metadata-written", { sessionPath, metaPath });
     } catch (err) {
-      logger.debug("subsession", "metadata-write-error", { sessionPath, error: err instanceof Error ? err.message : String(err) });
+      logger.debug("subsession", "metadata-write-error", {
+        sessionPath,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -371,7 +447,11 @@ export class SubsessionManager {
       if (existsSync(metaPath)) {
         const content = readFileSync(metaPath, "utf-8");
         const metadata = JSON.parse(content) as MinionSessionMetadata;
-        logger.debug("subsession", "metadata-read", { sessionPath, metaPath, id: metadata.sessionId });
+        logger.debug("subsession", "metadata-read", {
+          sessionPath,
+          metaPath,
+          id: metadata.sessionId,
+        });
         return metadata;
       }
 
@@ -382,16 +462,25 @@ export class SubsessionManager {
         if (firstLine) {
           const parsed = JSON.parse(firstLine);
           if (parsed.__metadata) {
-            logger.debug("subsession", "metadata-read-legacy", { sessionPath, id: parsed.__metadata.sessionId });
+            logger.debug("subsession", "metadata-read-legacy", {
+              sessionPath,
+              id: parsed.__metadata.sessionId,
+            });
             return parsed.__metadata as MinionSessionMetadata;
           }
         }
       }
 
-      logger.debug("subsession", "metadata-file-not-found", { sessionPath, metaPath });
+      logger.debug("subsession", "metadata-file-not-found", {
+        sessionPath,
+        metaPath,
+      });
       return undefined;
     } catch (err) {
-      logger.debug("subsession", "metadata-read-error", { sessionPath, error: err instanceof Error ? err.message : String(err) });
+      logger.debug("subsession", "metadata-read-error", {
+        sessionPath,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return undefined;
     }
   }
@@ -401,17 +490,21 @@ export class SubsessionManager {
     const minionsDir = getMinionsDir(this.cwd);
     try {
       const sessions = await SessionManager.list(this.cwd, minionsDir);
-      logger.debug("subsession", "loaded-session-list", { count: sessions.length });
+      logger.debug("subsession", "loaded-session-list", {
+        count: sessions.length,
+      });
       for (const session of sessions) {
-        logger.debug("subsession", "session-info", { 
-          path: session.path, 
-          id: session.id, 
+        logger.debug("subsession", "session-info", {
+          path: session.path,
+          id: session.id,
           name: session.name,
-          parentSessionPath: session.parentSessionPath 
+          parentSessionPath: session.parentSessionPath,
         });
       }
     } catch (err) {
-      logger.debug("subsession", "load-session-list-error", { error: err instanceof Error ? err.message : String(err) });
+      logger.debug("subsession", "load-session-list-error", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 }

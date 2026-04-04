@@ -1,7 +1,7 @@
 import { expect } from "vitest";
-import { MockTUI } from "./mock-tui.js";
-import { MockAgentTree } from "./mock-tree.js";
 import { MockSubsessionManager } from "./mock-subsession.js";
+import { MockAgentTree } from "./mock-tree.js";
+import { MockTUI } from "./mock-tui.js";
 
 export interface HarnessOptions {
   cwd?: string;
@@ -26,9 +26,7 @@ export class TestHarness {
 
   async sendInput(text: string): Promise<void> {
     // Simulate sending input to the session
-    await this.subsessionManager
-      .getSession(this.tree.getRunning()[0]?.id ?? "")
-      ?.steer(text);
+    await this.subsessionManager.getSession(this.tree.getRunning()[0]?.id ?? "")?.steer(text);
   }
 
   async waitForRender(count?: number, timeout?: number): Promise<void> {
@@ -67,10 +65,7 @@ export class TestHarness {
   }
 
   // Tool simulation helpers
-  async simulateToolCall(
-    toolName: string,
-    args: Record<string, unknown>
-  ): Promise<void> {
+  async simulateToolCall(toolName: string, args: Record<string, unknown>): Promise<void> {
     // Create a mock minion for this tool call
     const id = `mock-${toolName}-${Date.now()}`;
     this.tree.add(id, toolName, JSON.stringify(args));
@@ -99,7 +94,7 @@ export class TestHarness {
         render: (w: number) => [`[${toolName}] Called with: ${JSON.stringify(args)}`.slice(0, w)],
         invalidate: () => {},
       } as any,
-      this.width
+      this.width,
     );
   }
 }

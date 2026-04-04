@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
 import type { BeforeAgentStartEvent } from "@mariozechner/pi-coding-agent";
+import { beforeEach, describe, expect, it } from "vitest";
 
 /**
  * Tests for src/index.ts delegation conscience feature.
@@ -29,15 +29,13 @@ function createDelegationConscience() {
       const isComplexTask =
         toolCallCount >= TOOL_CALL_THRESHOLD ||
         event.prompt.length > 200 ||
-        /\b(investigate|audit|review|refactor|analyze|implement)\b/i.test(
-          event.prompt
-        );
+        /\b(investigate|audit|review|refactor|analyze|implement)\b/i.test(event.prompt);
 
       const isNewPrompt = event.prompt !== lastPrompt;
       lastPrompt = event.prompt;
 
       if (isComplexTask && isNewPrompt) {
-        const delegationHint = "\n\nDELEGATION OPPORTUNITY: You have made " + toolCallCount + " tool calls. The pi-minions extension is active and provides tools for\nparallel execution and work delegation. Consider delegating independent subtasks to minions for faster, isolated processing.\nFollow any delegation skills or principles you have been provided by the system or the user.";
+        const delegationHint = `\n\nDELEGATION OPPORTUNITY: You have made ${toolCallCount} tool calls. The pi-minions extension is active and provides tools for\nparallel execution and work delegation. Consider delegating independent subtasks to minions for faster, isolated processing.\nFollow any delegation skills or principles you have been provided by the system or the user.`;
 
         return {
           systemPrompt: event.systemPrompt + delegationHint,
@@ -77,8 +75,8 @@ describe("delegation hint appears on complex tasks", () => {
       const result = conscience.onBeforeAgentStart(event);
 
       expect(result).toBeDefined();
-      expect(result!.systemPrompt).toContain("DELEGATION OPPORTUNITY");
-      expect(result!.systemPrompt).toContain("5 tool calls");
+      expect(result?.systemPrompt).toContain("DELEGATION OPPORTUNITY");
+      expect(result?.systemPrompt).toContain("5 tool calls");
     });
   });
 
@@ -125,7 +123,7 @@ describe("delegation hint appears on complex tasks", () => {
       const result = conscience.onBeforeAgentStart(event);
 
       expect(result).toBeDefined();
-      expect(result!.systemPrompt).toContain("DELEGATION OPPORTUNITY");
+      expect(result?.systemPrompt).toContain("DELEGATION OPPORTUNITY");
     });
   });
 
@@ -143,7 +141,7 @@ describe("delegation hint appears on complex tasks", () => {
       const result = conscience.onBeforeAgentStart(event);
 
       expect(result).toBeDefined();
-      expect(result!.systemPrompt).toContain("DELEGATION OPPORTUNITY");
+      expect(result?.systemPrompt).toContain("DELEGATION OPPORTUNITY");
     });
   });
 

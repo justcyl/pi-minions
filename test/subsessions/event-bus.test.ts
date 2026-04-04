@@ -1,5 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
-import { EventBus, MINION_EVENT_CHANNEL, MINION_PROGRESS_CHANNEL, MINION_COMPLETE_CHANNEL } from "../../src/subsessions/event-bus.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  EventBus,
+  MINION_COMPLETE_CHANNEL,
+  MINION_EVENT_CHANNEL,
+  MINION_PROGRESS_CHANNEL,
+} from "../../src/subsessions/event-bus.js";
 
 describe("EventBus", () => {
   it("should allow subscribing to events", () => {
@@ -55,7 +60,7 @@ describe("EventBus", () => {
 
     bus.on("test", errorHandler);
     bus.on("test", goodHandler);
-    
+
     // Should not throw
     bus.emit("test", { data: "value" });
 

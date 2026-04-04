@@ -1,6 +1,5 @@
+import type { AgentToolResult, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import type { AgentToolResult } from "@mariozechner/pi-coding-agent";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { discoverAgents } from "../agents.js";
 
 export const ListAgentsParams = Type.Object({});
@@ -25,7 +24,9 @@ export function listAgents() {
     const lines: string[] = [];
 
     // Built-in ephemeral minion (always available)
-    lines.push("- minion (built-in): General-purpose ephemeral minion with default capabilities. Used when no agent name is specified.");
+    lines.push(
+      "- minion (built-in): General-purpose ephemeral minion with default capabilities. Used when no agent name is specified.",
+    );
 
     for (const a of agents) {
       const model = a.model ? ` [model: ${a.model}]` : "";
@@ -33,7 +34,11 @@ export function listAgents() {
     }
 
     const details: AgentInfo[] = [
-      { name: "minion", description: "General-purpose ephemeral minion", source: "built-in" },
+      {
+        name: "minion",
+        description: "General-purpose ephemeral minion",
+        source: "built-in",
+      },
       ...agents.map((a) => ({
         name: a.name,
         description: a.description,

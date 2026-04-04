@@ -1,12 +1,12 @@
-import { Type } from "@sinclair/typebox";
-import type { Static } from "@sinclair/typebox";
 import type { AgentToolResult, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { AgentTree } from "../tree.js";
+import type { Static } from "@sinclair/typebox";
+import { Type } from "@sinclair/typebox";
 import type { ResultQueue } from "../queue.js";
-import type { AgentNode } from "../types.js";
 import { formatDuration, formatUsage } from "../render.js";
 import type { SubsessionManager } from "../subsessions/manager.js";
 import { getMinionHistory } from "../subsessions/observability.js";
+import type { AgentTree } from "../tree.js";
+import type { AgentNode } from "../types.js";
 
 // Shared validation helpers
 
@@ -23,14 +23,14 @@ export type SteerValidationResult =
 export function validateSteerTarget(
   tree: AgentTree,
   subsessionManager: SubsessionManager,
-  target: string
+  target: string,
 ): SteerValidationResult {
   const node = tree.resolve(target);
   if (!node) {
     return {
       success: false,
       error: `Minion not found: ${target}`,
-      errorType: "error"
+      errorType: "error",
     };
   }
 
@@ -38,7 +38,7 @@ export function validateSteerTarget(
     return {
       success: false,
       error: `Minion ${node.name} (${node.id}) is not running (status: ${node.status}).`,
-      errorType: "info"
+      errorType: "info",
     };
   }
 
@@ -47,7 +47,7 @@ export function validateSteerTarget(
     return {
       success: false,
       error: `No active session for ${node.name} (${node.id}).`,
-      errorType: "error"
+      errorType: "error",
     };
   }
 
@@ -60,7 +60,7 @@ export function validateSteerTarget(
 export async function executeSteering(
   node: AgentNode,
   steer: (text: string) => Promise<void>,
-  message: string
+  message: string,
 ): Promise<string> {
   const wrappedMessage =
     `[USER STEER] The user has provided an additional directive while you are working.\n` +
@@ -75,7 +75,11 @@ export async function executeSteering(
 
 // list_minions
 
-export function buildListMinionsText(tree: AgentTree, queue: ResultQueue, _subsessionManager: SubsessionManager): string {
+export function buildListMinionsText(
+  tree: AgentTree,
+  queue: ResultQueue,
+  _subsessionManager: SubsessionManager,
+): string {
   const running = tree.getRunning();
   const pending = queue.getPending();
 
@@ -126,14 +130,13 @@ export function listMinions(
 
 export const SteerMinionParams = Type.Object({
   target: Type.String({ description: "Minion ID or name to steer" }),
-  message: Type.String({ description: "Message to inject into the minion's context before its next LLM call" }),
+  message: Type.String({
+    description: "Message to inject into the minion's context before its next LLM call",
+  }),
 });
 export type SteerMinionParams = Static<typeof SteerMinionParams>;
 
-export function steerMinion(
-  tree: AgentTree,
-  subsessionManager: SubsessionManager,
-) {
+export function steerMinion(tree: AgentTree, subsessionManager: SubsessionManager) {
   return async function execute(
     _toolCallId: string,
     params: SteerMinionParams,
@@ -156,7 +159,11 @@ export function steerMinion(
 
 // show_minion
 
-export function buildShowMinionText(tree: AgentTree, queue: ResultQueue, target: string): string | null {
+export function buildShowMinionText(
+  tree: AgentTree,
+  queue: ResultQueue,
+  target: string,
+): string | null {
   const node = tree.resolve(target);
   const result = queue.get(target);
 
@@ -186,7 +193,9 @@ export function buildShowMinionText(tree: AgentTree, queue: ResultQueue, target:
     const history = getMinionHistory(node.id);
     if (history.length > 0) {
       lines.push(`  Recent activity:`);
-      history.forEach(msg => lines.push(`    ${msg}`));
+      for (const msg of history) {
+        lines.push(`    ${msg}`);
+      }
     }
 
     // Suggest interactive view for live updates
@@ -210,10 +219,7 @@ export const ShowMinionParams = Type.Object({
 });
 export type ShowMinionParams = Static<typeof ShowMinionParams>;
 
-export function showMinion(
-  tree: AgentTree,
-  queue: ResultQueue,
-) {
+export function showMinion(tree: AgentTree, queue: ResultQueue) {
   return async function execute(
     _toolCallId: string,
     params: ShowMinionParams,

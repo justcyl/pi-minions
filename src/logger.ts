@@ -6,9 +6,13 @@ const LOG_DIR = join("/tmp", "logs", "pi-minions");
 export const LOG_FILE = join(LOG_DIR, "debug.log");
 
 // Ensure directory exists at module load time
-try { mkdirSync(LOG_DIR, { recursive: true }); } catch { /* ignore */ }
+try {
+  mkdirSync(LOG_DIR, { recursive: true });
+} catch {
+  /* ignore */
+}
 
-const val = process.env["PI_MINIONS_DEBUG"];
+const val = process.env.PI_MINIONS_DEBUG;
 const debugEnabled = val === "1" || val === "true";
 
 let _batch: string[] = [];
@@ -28,14 +32,17 @@ function scheduleFlush(): void {
 
 function write(level: string, scope: string, msg: string, data?: unknown): void {
   const ts = new Date().toISOString().slice(11, 23); // HH:MM:SS.mmm
-  const suffix = data !== undefined ? " " + JSON.stringify(data) : "";
+  const suffix = data !== undefined ? ` ${JSON.stringify(data)}` : "";
   _batch.push(`[${ts}] [${level}] [${scope}] ${msg}${suffix}\n`);
   scheduleFlush();
 }
 
 /** Drain pending log writes. */
 export async function flushLogger(): Promise<void> {
-  if (_flushTimer !== null) { clearImmediate(_flushTimer); _flushTimer = null; }
+  if (_flushTimer !== null) {
+    clearImmediate(_flushTimer);
+    _flushTimer = null;
+  }
   if (_batch.length > 0) {
     const data = _batch.join("");
     _batch = [];

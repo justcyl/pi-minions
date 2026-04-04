@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { generateId, pickMinionName, defaultMinionTemplate, DEFAULT_MINION_PROMPT } from "../src/minions.js";
+import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_MINION_PROMPT,
+  defaultMinionTemplate,
+  generateId,
+  pickMinionName,
+} from "../src/minions.js";
 import { AgentTree } from "../src/tree.js";
 
 describe("defaultMinionTemplate", () => {

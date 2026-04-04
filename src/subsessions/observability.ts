@@ -2,13 +2,12 @@
 // Uses EventBus to receive real-time events from the minion
 
 import type { ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
 import type { TUI } from "@mariozechner/pi-tui";
-import { Key, matchesKey } from "@mariozechner/pi-tui";
+import { Key, matchesKey, Text } from "@mariozechner/pi-tui";
+import { logger } from "../logger.js";
+import type { AgentTree } from "../tree.js";
 import type { EventBus } from "./event-bus.js";
 import { MINION_PROGRESS_CHANNEL } from "./event-bus.js";
-import type { AgentTree } from "../tree.js";
-import { logger } from "../logger.js";
 
 const OBSERVABILITY_WIDGET_KEY = "minion-observability";
 const MAX_VISIBLE_MESSAGES = 4;
@@ -20,22 +19,20 @@ export function getMinionHistory(minionId: string): string[] {
     const { readdirSync, readFileSync, statSync } = require("node:fs");
     const { join } = require("node:path");
     const TRANSCRIPT_DIR = join("/tmp", "logs", "pi-minions", "minions");
-    
+
     // Find transcript files for this minion
     const files = readdirSync(TRANSCRIPT_DIR)
       .filter((f: string) => f.startsWith(minionId) && f.endsWith(".log"))
       .map((f: string) => join(TRANSCRIPT_DIR, f));
-    
+
     if (files.length === 0) return [];
-    
+
     // Use the most recently modified file
-    const file = files.sort((a: string, b: string) => 
-      statSync(b).mtimeMs - statSync(a).mtimeMs
-    )[0];
-    
+    const file = files.sort((a: string, b: string) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+
     const content = readFileSync(file, "utf-8");
     const lines = content.split("\n");
-    
+
     // Extract activity lines (skip header)
     const activities: string[] = [];
     let inHeader = true;
@@ -48,7 +45,7 @@ export function getMinionHistory(minionId: string): string[] {
         activities.push(line.trim());
       }
     }
-    
+
     // Return last 4 activities
     return activities.slice(-4);
   } catch {
@@ -96,17 +93,28 @@ class MinionObservabilityWidget {
     logger.debug("observability", "widget-start", { minionId: this.minionId });
 
     // Subscribe to EventBus for this minion's events
-    this.unsubscribeEventBus = this.eventBus.on(MINION_PROGRESS_CHANNEL, (data: { id: string; progress: unknown }) => {
-      if (data.id === this.minionId) {
-        logger.debug("observability", "event-received", { minionId: this.minionId, progressType: (data.progress as any)?.type });
-        this.handleEvent();
-      }
-    });
+    this.unsubscribeEventBus = this.eventBus.on(
+      MINION_PROGRESS_CHANNEL,
+      (data: { id: string; progress: unknown }) => {
+        if (data.id === this.minionId) {
+          const progressData = data.progress as { type?: string } | undefined;
+          logger.debug("observability", "event-received", {
+            minionId: this.minionId,
+            progressType: progressData?.type,
+          });
+          this.handleEvent();
+        }
+      },
+    );
 
     // Subscribe to tree changes to get activity updates
     this.unsubscribeTree = this.tree.onChange(() => {
       const node = this.tree.get(this.minionId);
-      logger.debug("observability", "tree-change", { minionId: this.minionId, hasNode: !!node, lastActivity: node?.lastActivity });
+      logger.debug("observability", "tree-change", {
+        minionId: this.minionId,
+        hasNode: !!node,
+        lastActivity: node?.lastActivity,
+      });
       if (node?.lastActivity) {
         this.addMessage(node.lastActivity);
       }
@@ -121,7 +129,9 @@ class MinionObservabilityWidget {
     // Then load current activity if available
     const node = this.tree.get(this.minionId);
     if (node?.lastActivity) {
-      logger.debug("observability", "initial-activity", { activity: node.lastActivity });
+      logger.debug("observability", "initial-activity", {
+        activity: node.lastActivity,
+      });
       this.addMessage(node.lastActivity);
     }
   }
@@ -155,7 +165,9 @@ class MinionObservabilityWidget {
   }
 
   private triggerUpdate(): void {
-    logger.debug("observability", "trigger-update", { messageCount: this.messages.length });
+    logger.debug("observability", "trigger-update", {
+      messageCount: this.messages.length,
+    });
     this.onUpdate();
   }
 
@@ -165,7 +177,10 @@ class MinionObservabilityWidget {
     // If new text starts with the previous text (e.g., streaming text delta),
     // update the existing message instead of creating a new line
     if (lastMsg && text.startsWith(lastMsg.text) && text.length > lastMsg.text.length) {
-      logger.debug("observability", "update-message", { oldText: lastMsg.text, newText: text });
+      logger.debug("observability", "update-message", {
+        oldText: lastMsg.text,
+        newText: text,
+      });
       lastMsg.text = text;
       this.triggerUpdate();
       return;
@@ -176,7 +191,10 @@ class MinionObservabilityWidget {
       return;
     }
 
-    logger.debug("observability", "add-message", { text, currentCount: this.messages.length });
+    logger.debug("observability", "add-message", {
+      text,
+      currentCount: this.messages.length,
+    });
     this.messages.push({ text });
 
     // Keep only last N messages for display
@@ -223,11 +241,11 @@ class MinionObservabilityWidget {
     // Header line: badge + minion name + help
     const headerText = `${badge} ${this.minionName} (${this.minionId.slice(0, 6)}...)`;
     const helpText = "q/esc:close · tab/shift+tab:navigate";
-    
+
     // Header with accent for badge+name, dim for help
-    const headerLine = theme.fg("accent", this.truncate(headerText, width - helpText.length - 3)) + "  " + dim(helpText);
+    const headerLine = `${theme.fg("accent", this.truncate(headerText, width - helpText.length - 3))}  ${dim(helpText)}`;
     lines.push(headerLine);
-    
+
     // Separator line (underscore style)
     lines.push(muted("─".repeat(Math.min(width, 60))));
 
@@ -235,7 +253,7 @@ class MinionObservabilityWidget {
     // Start with minimal height, grow up to MAX_VISIBLE_MESSAGES
     const msgCount = this.messages.length;
     const displayCount = Math.min(msgCount, MAX_VISIBLE_MESSAGES);
-    
+
     // Show messages (already in order: oldest -> newest)
     for (let i = 0; i < displayCount; i++) {
       const msg = this.messages[this.messages.length - displayCount + i];
@@ -246,9 +264,10 @@ class MinionObservabilityWidget {
   }
 
   private truncate(text: string, maxWidth: number): string {
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentional ANSI escape sequence matching
     const visible = text.replace(/\x1b\[[0-9;]*m/g, "").length;
     if (visible <= maxWidth) return text;
-    return text.slice(0, maxWidth - 3) + "...";
+    return `${text.slice(0, maxWidth - 3)}...`;
   }
 }
 
@@ -318,7 +337,17 @@ export function showMinionObservability(
       }
     };
 
-    const widget = new MinionObservabilityWidget(minionId, minionName, eventBus, tree, handleClose, handleBack, handleUpdate, handleNext, handlePrev);
+    const widget = new MinionObservabilityWidget(
+      minionId,
+      minionName,
+      eventBus,
+      tree,
+      handleClose,
+      handleBack,
+      handleUpdate,
+      handleNext,
+      handlePrev,
+    );
 
     unsubscribeInput = ctx.ui.onTerminalInput((data: string) => {
       const result = widget.handleInput(data);

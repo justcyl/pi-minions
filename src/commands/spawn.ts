@@ -1,6 +1,8 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
-export function parseSpawnArgs(args: string): { task: string; model?: string; background: boolean } | { error: string } {
+export function parseSpawnArgs(
+  args: string,
+): { task: string; model?: string; background: boolean } | { error: string } {
   const tokens = args.trim().split(/\s+/);
 
   if (tokens.length === 0 || tokens[0] === "") {
@@ -21,12 +23,15 @@ export function parseSpawnArgs(args: string): { task: string; model?: string; ba
   if (modelFlagIdx !== -1) {
     const modelValue = tokens[modelFlagIdx + 1];
     if (!modelValue || modelValue.startsWith("--")) {
-      return { error: "Usage: /spawn <task> [--model <model>] [--bg] -- --model requires a value" };
+      return {
+        error: "Usage: /spawn <task> [--model <model>] [--bg] -- --model requires a value",
+      };
     }
     model = modelValue;
     for (let i = 0; i < tokens.length; i++) {
       if (i === modelFlagIdx || i === modelFlagIdx + 1) continue;
-      remaining.push(tokens[i]!);
+      const token = tokens[i];
+      if (token) remaining.push(token);
     }
   } else {
     remaining.push(...tokens);
@@ -34,7 +39,9 @@ export function parseSpawnArgs(args: string): { task: string; model?: string; ba
 
   const task = remaining.join(" ").trim();
   if (!task) {
-    return { error: "Usage: /spawn <task> [--model <model>] [--bg] -- task cannot be empty" };
+    return {
+      error: "Usage: /spawn <task> [--model <model>] [--bg] -- task cannot be empty",
+    };
   }
 
   return { task, model, background };

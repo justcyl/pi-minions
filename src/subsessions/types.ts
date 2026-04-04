@@ -28,13 +28,24 @@ export interface CreateMinionSessionOptions {
   spawnedBy: string;
   cwd: string;
   modelRegistry: import("@mariozechner/pi-coding-agent").ModelRegistry;
+  // biome-ignore lint/suspicious/noExplicitAny: external API type
   parentModel?: import("@mariozechner/pi-ai").Model<any>;
   parentSystemPrompt?: string;
   signal?: AbortSignal;
-  onToolActivity?: (activity: { type: "start" | "end"; toolName: string; args?: Record<string, unknown> }) => void;
+  onToolActivity?: (activity: {
+    type: "start" | "end";
+    toolName: string;
+    args?: Record<string, unknown>;
+  }) => void;
   onToolOutput?: (toolName: string, delta: string) => void;
   onTextDelta?: (delta: string, fullText: string) => void;
   onTurnEnd?: (turnCount: number) => void;
-  onUsageUpdate?: (usage: { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number }) => void;
+  onUsageUpdate?: (usage: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    cost: number;
+  }) => void;
   onComplete?: (result: { exitCode: number; output: string }) => void;
 }

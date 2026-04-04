@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 
 describe("Config Inheritance", () => {
   it("filters pi-minions from extension list", () => {
@@ -6,8 +6,8 @@ describe("Config Inheritance", () => {
       { path: "other", resolvedPath: "/path/to/other" },
       { path: "pi-minions", resolvedPath: "/node_modules/pi-minions" },
     ];
-    const filtered = mockExtensions.filter(ext => !ext.resolvedPath.includes("pi-minions"));
+    const filtered = mockExtensions.filter((ext) => !ext.resolvedPath.includes("pi-minions"));
     expect(filtered).toHaveLength(1);
-    expect(filtered[0]!.path).toBe("other");
+    expect(filtered[0]?.path).toBe("other");
   });
 });

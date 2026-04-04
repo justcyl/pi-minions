@@ -1,35 +1,59 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { parseSpawnArgs } from "../../src/commands/spawn.js";
 
 describe("parseSpawnArgs", () => {
   it("parses plain task with no flags", () => {
     const result = parseSpawnArgs("do the thing");
-    expect(result).toEqual({ task: "do the thing", model: undefined, background: false });
+    expect(result).toEqual({
+      task: "do the thing",
+      model: undefined,
+      background: false,
+    });
   });
 
   it("extracts --model flag and leaves rest as task", () => {
     const result = parseSpawnArgs("do it --model claude-haiku-4-5");
-    expect(result).toEqual({ task: "do it", model: "claude-haiku-4-5", background: false });
+    expect(result).toEqual({
+      task: "do it",
+      model: "claude-haiku-4-5",
+      background: false,
+    });
   });
 
   it("handles --model at the start", () => {
     const result = parseSpawnArgs("--model sonnet do the thing");
-    expect(result).toEqual({ task: "do the thing", model: "sonnet", background: false });
+    expect(result).toEqual({
+      task: "do the thing",
+      model: "sonnet",
+      background: false,
+    });
   });
 
   it("handles --model in the middle", () => {
     const result = parseSpawnArgs("find all --model haiku files");
-    expect(result).toEqual({ task: "find all files", model: "haiku", background: false });
+    expect(result).toEqual({
+      task: "find all files",
+      model: "haiku",
+      background: false,
+    });
   });
 
   it("extracts --bg flag", () => {
     const result = parseSpawnArgs("do the thing --bg");
-    expect(result).toEqual({ task: "do the thing", model: undefined, background: true });
+    expect(result).toEqual({
+      task: "do the thing",
+      model: undefined,
+      background: true,
+    });
   });
 
   it("handles --bg at start", () => {
     const result = parseSpawnArgs("--bg do the thing");
-    expect(result).toEqual({ task: "do the thing", model: undefined, background: true });
+    expect(result).toEqual({
+      task: "do the thing",
+      model: undefined,
+      background: true,
+    });
   });
 
   it("handles --bg with --model", () => {

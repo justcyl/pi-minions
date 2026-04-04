@@ -1,5 +1,11 @@
-import { describe, it, expect } from "vitest";
-import { formatTokens, formatDuration, formatToolCall, formatUsage, renderResult } from "../src/render.js";
+import { describe, expect, it } from "vitest";
+import {
+  formatDuration,
+  formatTokens,
+  formatToolCall,
+  formatUsage,
+  renderResult,
+} from "../src/render.js";
 import type { UsageStats } from "../src/types.js";
 import { emptyUsage } from "../src/types.js";
 
@@ -70,26 +76,41 @@ describe("formatToolCall", () => {
 describe("formatUsage", () => {
   it("returns non-empty string for populated stats", () => {
     const usage: UsageStats = {
-      input: 1000, output: 200, cacheRead: 50, cacheWrite: 10,
-      cost: 0.002, contextTokens: 1260, turns: 3,
+      input: 1000,
+      output: 200,
+      cacheRead: 50,
+      cacheWrite: 10,
+      cost: 0.002,
+      contextTokens: 1260,
+      turns: 3,
     };
     const result = formatUsage(usage);
     expect(result.length).toBeGreaterThan(0);
-    expect(result).toContain("3");  // turns
+    expect(result).toContain("3"); // turns
   });
 
   it("includes model when provided", () => {
     const usage: UsageStats = {
-      input: 100, output: 20, cacheRead: 0, cacheWrite: 0,
-      cost: 0, contextTokens: 120, turns: 1,
+      input: 100,
+      output: 20,
+      cacheRead: 0,
+      cacheWrite: 0,
+      cost: 0,
+      contextTokens: 120,
+      turns: 1,
     };
     expect(formatUsage(usage, "haiku")).toContain("haiku");
   });
 
   it("handles zero usage without throwing", () => {
     const usage: UsageStats = {
-      input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
-      cost: 0, contextTokens: 0, turns: 0,
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      cost: 0,
+      contextTokens: 0,
+      turns: 0,
     };
     expect(() => formatUsage(usage)).not.toThrow();
   });
@@ -104,9 +125,15 @@ describe("renderResult", () => {
 
   it("streaming render does not include inline /minions bg hint", () => {
     const details = {
-      id: "abc", name: "kevin", agentName: "kevin", task: "t",
-      status: "running", usage: emptyUsage(), finalOutput: "",
-      activity: "thinking…", spinnerFrame: 0,
+      id: "abc",
+      name: "kevin",
+      agentName: "kevin",
+      task: "t",
+      status: "running",
+      usage: emptyUsage(),
+      finalOutput: "",
+      activity: "thinking…",
+      spinnerFrame: 0,
     };
     const result = renderResult(
       { content: [], details },
@@ -122,17 +149,21 @@ describe("renderResult", () => {
 
   it("streaming render caches name/id to state", () => {
     const details = {
-      id: "abc", name: "kevin", agentName: "kevin", task: "t",
-      status: "running", usage: emptyUsage(), finalOutput: "",
-      activity: "thinking…", spinnerFrame: 0,
+      id: "abc",
+      name: "kevin",
+      agentName: "kevin",
+      task: "t",
+      status: "running",
+      usage: emptyUsage(),
+      finalOutput: "",
+      activity: "thinking…",
+      spinnerFrame: 0,
     };
     const state: Record<string, string | undefined> = {};
-    renderResult(
-      { content: [], details },
-      { expanded: false, isPartial: true },
-      theme,
-      { isError: false, state },
-    );
+    renderResult({ content: [], details }, { expanded: false, isPartial: true }, theme, {
+      isError: false,
+      state,
+    });
     expect(state.cachedName).toBe("kevin");
     expect(state.cachedId).toBe("abc");
   });
@@ -153,9 +184,15 @@ describe("renderResult", () => {
 
   it("renders completion layout when isPartial=true but status is completed", () => {
     const details = {
-      id: "abc", name: "kevin", agentName: "kevin", task: "t",
-      status: "completed", usage: emptyUsage(), finalOutput: "done",
-      activity: "thinking\u2026", spinnerFrame: 3,
+      id: "abc",
+      name: "kevin",
+      agentName: "kevin",
+      task: "t",
+      status: "completed",
+      usage: emptyUsage(),
+      finalOutput: "done",
+      activity: "thinking\u2026",
+      spinnerFrame: 3,
     };
     const result = renderResult(
       { content: [], details },
@@ -170,8 +207,13 @@ describe("renderResult", () => {
 
   it("renders completion layout when isPartial=true but status is failed", () => {
     const details = {
-      id: "abc", name: "kevin", agentName: "kevin", task: "t",
-      status: "failed", usage: emptyUsage(), finalOutput: "",
+      id: "abc",
+      name: "kevin",
+      agentName: "kevin",
+      task: "t",
+      status: "failed",
+      usage: emptyUsage(),
+      finalOutput: "",
       spinnerFrame: 2,
     };
     const result = renderResult(

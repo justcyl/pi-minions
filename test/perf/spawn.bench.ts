@@ -1,35 +1,51 @@
-import { bench, describe, it, expect } from 'vitest';
+import { bench, describe, expect, it } from "vitest";
 
-describe('Spinner interval performance', () => {
-  bench('setInterval 80ms (current)', async () => {
-    let counter = 0;
-    const interval = setInterval(() => { counter++; }, 80);
+describe("Spinner interval performance", () => {
+  bench(
+    "setInterval 80ms (current)",
+    async () => {
+      let _counter = 0;
+      const interval = setInterval(() => {
+        _counter++;
+      }, 80);
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    clearInterval(interval);
-  }, { time: 2000 });
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      clearInterval(interval);
+    },
+    { time: 2000 },
+  );
 
-  bench('setInterval 200ms (proposed)', async () => {
-    let counter = 0;
-    const interval = setInterval(() => { counter++; }, 200);
+  bench(
+    "setInterval 200ms (proposed)",
+    async () => {
+      let _counter = 0;
+      const interval = setInterval(() => {
+        _counter++;
+      }, 200);
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    clearInterval(interval);
-  }, { time: 2000 });
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      clearInterval(interval);
+    },
+    { time: 2000 },
+  );
 
-  it('compare update frequency', async () => {
+  it("compare update frequency", async () => {
     // Run 80ms interval for 5 seconds
     let counter80 = 0;
-    const interval80 = setInterval(() => { counter80++; }, 80);
+    const interval80 = setInterval(() => {
+      counter80++;
+    }, 80);
 
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise((resolve) => setTimeout(resolve, 5000));
     clearInterval(interval80);
 
     // Run 200ms interval for 5 seconds
     let counter200 = 0;
-    const interval200 = setInterval(() => { counter200++; }, 200);
+    const interval200 = setInterval(() => {
+      counter200++;
+    }, 200);
 
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise((resolve) => setTimeout(resolve, 5000));
     clearInterval(interval200);
 
     // 80ms fires ~62 times in 5s, 200ms fires ~25 times in 5s

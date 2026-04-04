@@ -1,10 +1,12 @@
-import type { AgentToolResult } from "@mariozechner/pi-coding-agent";
-import type { Theme, ToolRenderResultOptions } from "@mariozechner/pi-coding-agent";
+import type {
+  AgentToolResult,
+  Theme,
+  ToolRenderResultOptions,
+} from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
-import type { UsageStats } from "./types.js";
-import type { SpawnToolDetails } from "./tools/spawn.js";
 import { minionSpawnRenderer } from "./renderers/minion-spawn.js";
-import { logger } from "./logger.js";
+import type { SpawnToolDetails } from "./tools/spawn.js";
+import type { UsageStats } from "./types.js";
 
 // Formatting helpers
 
@@ -26,12 +28,12 @@ export function formatDuration(ms: number): string {
 
 export function formatToolCall(name: string, args: Record<string, unknown>): string {
   if (name === "bash") {
-    const cmd = String(args["command"] ?? "");
+    const cmd = String(args.command ?? "");
     const truncated = cmd.length > 60 ? `${cmd.slice(0, 60)}...` : cmd;
     return `$ ${truncated}`;
   }
   if (name === "read") {
-    const path = String(args["path"] ?? args["file_path"] ?? "");
+    const path = String(args.path ?? args.file_path ?? "");
     return `read ${path}`;
   }
   const preview = JSON.stringify(args);
@@ -55,28 +57,17 @@ export function formatUsage(usage: UsageStats, model?: string): string {
 
 // TUI render functions
 
-export function renderCall(
-  args: Record<string, unknown>,
-  theme: Theme,
-  _ctx: unknown,
-): Text {
-  const agentName = args["agent"] ? String(args["agent"]) : undefined;
-  const task = String(args["task"] ?? "");
+export function renderCall(args: Record<string, unknown>, theme: Theme, _ctx: unknown): Text {
+  const agentName = args.agent ? String(args.agent) : undefined;
+  const task = String(args.task ?? "");
   const taskPreview = task.length > 60 ? `${task.slice(0, 60)}…` : task;
-  const model = args["model"] ? ` [${args["model"]}]` : "";
+  const model = args.model ? ` [${args.model}]` : "";
 
-  const label = agentName
-    ? theme.fg("accent", agentName)
-    : theme.fg("muted", taskPreview);
+  const label = agentName ? theme.fg("accent", agentName) : theme.fg("muted", taskPreview);
 
-  const text =
-    theme.fg("toolTitle", theme.bold("spawn ")) +
-    label +
-    theme.fg("dim", model);
+  const text = theme.fg("toolTitle", theme.bold("spawn ")) + label + theme.fg("dim", model);
   return new Text(text, 0, 0);
 }
-
-
 
 export function renderResult(
   result: AgentToolResult<SpawnToolDetails>,
@@ -105,7 +96,15 @@ export function renderResult(
       agentName: name,
       task: "",
       status: ctx.isError ? "failed" : "completed",
-      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: 0,
+        contextTokens: 0,
+        turns: 0,
+      },
       finalOutput: "",
       spinnerFrame: 0,
     } as SpawnToolDetails;
@@ -119,20 +118,32 @@ export function renderResult(
       agentName: "minion",
       task: "",
       status: ctx.isError ? "failed" : "completed",
-      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: 0,
+        contextTokens: 0,
+        turns: 0,
+      },
       finalOutput: "",
       spinnerFrame: 0,
     } as SpawnToolDetails;
   }
 
-  const rendered = minionSpawnRenderer({
-    role: "custom",
-    customType: "minion-spawn",
-    content: "",
-    display: true,
-    details,
-    timestamp: new Date().getTime(),
-  }, { expanded }, theme);
+  const rendered = minionSpawnRenderer(
+    {
+      role: "custom",
+      customType: "minion-spawn",
+      content: "",
+      display: true,
+      details,
+      timestamp: Date.now(),
+    },
+    { expanded },
+    theme,
+  );
 
   if (rendered instanceof Text) {
     return rendered;

@@ -1,13 +1,18 @@
-import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
-import type { Component } from "@mariozechner/pi-tui";
-import type { Theme, ReadonlyFooterDataProvider, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import * as os from "node:os";
 import type { Model } from "@mariozechner/pi-ai";
+import type {
+  ExtensionContext,
+  ReadonlyFooterDataProvider,
+  Theme,
+} from "@mariozechner/pi-coding-agent";
+import type { Component } from "@mariozechner/pi-tui";
+import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { formatTokens } from "./render.js";
 import type { AgentTree } from "./tree.js";
-import * as os from "os";
 
 export interface FooterFactoryDeps {
   getCtx: () => ExtensionContext | null;
+  // biome-ignore lint/suspicious/noExplicitAny: external API type
   getModel: () => Model<any> | undefined;
   getThinkingLevel: () => string;
   tree: AgentTree;
@@ -17,23 +22,26 @@ export interface FooterFactoryDeps {
 function abbreviatePath(p: string): string {
   const home = os.homedir();
   if (p === home) return "~";
-  if (p.startsWith(home + "/")) return "~" + p.slice(home.length);
+  if (p.startsWith(`${home}/`)) return `~${p.slice(home.length)}`;
   return p;
 }
 
 /** Sanitize a status string: strip control chars, collapse spaces. */
 function sanitizeStatus(s: string): string {
-  return s.replace(/[\r\n\t]/g, " ").replace(/  +/g, " ").trim();
+  return s
+    .replace(/[\r\n\t]/g, " ")
+    .replace(/ {2,}/g, " ")
+    .trim();
 }
 
-export function buildFooterFactory(deps: FooterFactoryDeps): (
-  tui: unknown,
-  theme: Theme,
-  footerData: ReadonlyFooterDataProvider,
-) => Component {
+export function buildFooterFactory(
+  deps: FooterFactoryDeps,
+): (tui: unknown, theme: Theme, footerData: ReadonlyFooterDataProvider) => Component {
   return (_tui, theme, footerData) => {
     return {
-      invalidate(): void { /* stateless — nothing to invalidate */ },
+      invalidate(): void {
+        /* stateless — nothing to invalidate */
+      },
       render(width: number): string[] {
         const ctx = deps.getCtx();
         if (!ctx) return [];
@@ -50,19 +58,23 @@ export function buildFooterFactory(deps: FooterFactoryDeps): (
         for (const entry of ctx.sessionManager.getEntries()) {
           if (entry.type !== "message") continue;
 
-          const msg = (entry as any).message;
+          const entryMsg = entry as {
+            message?: { role?: string; usage?: Record<string, number | { total?: number }> };
+          };
+          const msg = entryMsg.message;
           if (!msg || msg.role !== "assistant") continue;
 
           const u = msg.usage;
           if (!u) continue;
 
-          totalInput += u.input ?? 0;
-          totalOutput += u.output ?? 0;
-          totalCacheRead += u.cacheRead ?? 0;
-          totalCacheWrite += u.cacheWrite ?? 0;
+          totalInput += (u.input as number) ?? 0;
+          totalOutput += (u.output as number) ?? 0;
+          totalCacheRead += (u.cacheRead as number) ?? 0;
+          totalCacheWrite += (u.cacheWrite as number) ?? 0;
 
           // Session entries use nested cost.total; add safely
-          totalCost += u.cost?.total ?? 0;
+          const cost = u.cost as number | { total?: number } | undefined;
+          totalCost += typeof cost === "number" ? cost : (cost?.total ?? 0);
         }
 
         // -- Add minion totals --
@@ -94,11 +106,11 @@ export function buildFooterFactory(deps: FooterFactoryDeps): (
           const windowStr = formatTokens(contextUsage.contextWindow);
           const pctText = `${pct}%/${windowStr}`;
           if (pct > 90) {
-            ctxStr = " " + theme.fg("error", pctText);
+            ctxStr = ` ${theme.fg("error", pctText)}`;
           } else if (pct > 70) {
-            ctxStr = " " + theme.fg("warning", pctText);
+            ctxStr = ` ${theme.fg("warning", pctText)}`;
           } else {
-            ctxStr = " " + pctText;
+            ctxStr = ` ${pctText}`;
           }
         }
 
@@ -108,9 +120,8 @@ export function buildFooterFactory(deps: FooterFactoryDeps): (
         if (model) {
           const modelName = model.name ?? model.id;
           const thinkingLevel = deps.getThinkingLevel();
-          const thinkingSuffix = model.reasoning && thinkingLevel !== "off"
-            ? ` [${thinkingLevel}]`
-            : "";
+          const thinkingSuffix =
+            model.reasoning && thinkingLevel !== "off" ? ` [${thinkingLevel}]` : "";
           modelRight = `${modelName}${thinkingSuffix}`;
         }
 
@@ -126,7 +137,7 @@ export function buildFooterFactory(deps: FooterFactoryDeps): (
           line2Raw = statsLeft + " ".repeat(spaces) + modelRight;
         } else if (modelRight && statsLeftWidth + gap <= width) {
           const available = width - statsLeftWidth - gap;
-          line2Raw = statsLeft + "  " + truncateToWidth(modelRight, available);
+          line2Raw = `${statsLeft}  ${truncateToWidth(modelRight, available)}`;
         } else {
           line2Raw = truncateToWidth(statsLeft, width);
         }

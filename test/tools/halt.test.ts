@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SubsessionManager } from "../../src/subsessions/manager.js";
+import { abortAgents, halt } from "../../src/tools/halt.js";
 import { AgentTree } from "../../src/tree.js";
-import { SubsessionManager } from "../../src/subsessions/manager.js";
-import { halt, abortAgents } from "../../src/tools/halt.js";
 
 function createCtx() {
   return { cwd: "/tmp" } as any;
@@ -20,7 +20,13 @@ function mockSession() {
     steer: vi.fn().mockResolvedValue(undefined),
     state: { messages: [] },
     getSessionStats: vi.fn().mockReturnValue({
-      tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+      tokens: {
+        input: 100,
+        output: 50,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 150,
+      },
       cost: 0.001,
     }),
   };
@@ -38,7 +44,7 @@ describe("abortAgents", () => {
     await abortAgents(["id1"], tree, subsessionManager);
 
     expect(session.abort).toHaveBeenCalled();
-    expect(tree.get("id1")!.status).toBe("aborted");
+    expect(tree.get("id1")?.status).toBe("aborted");
   });
 
   it("still aborts tree node when no session exists", async () => {
@@ -50,7 +56,7 @@ describe("abortAgents", () => {
 
     await abortAgents(["id1"], tree, subsessionManager);
 
-    expect(tree.get("id1")!.status).toBe("aborted");
+    expect(tree.get("id1")?.status).toBe("aborted");
   });
 
   it("returns count of aborted agents", async () => {
@@ -85,7 +91,7 @@ describe("halt", () => {
 
     const result = await execute("tc", { id: "id1" }, undefined, undefined, createCtx());
 
-    expect(tree.get("id1")!.status).toBe("aborted");
+    expect(tree.get("id1")?.status).toBe("aborted");
     const text = (result.content[0] as { type: "text"; text: string }).text;
     expect(text).toContain("id1");
   });
@@ -99,8 +105,8 @@ describe("halt", () => {
 
     const result = await execute("tc", { id: "all" }, undefined, undefined, createCtx());
 
-    expect(tree.get("a")!.status).toBe("aborted");
-    expect(tree.get("b")!.status).toBe("aborted");
+    expect(tree.get("a")?.status).toBe("aborted");
+    expect(tree.get("b")?.status).toBe("aborted");
     const text = (result.content[0] as { type: "text"; text: string }).text;
     expect(text).toContain("2");
   });
@@ -108,9 +114,9 @@ describe("halt", () => {
   it("throws for unknown agent id", async () => {
     const execute = halt(tree, subsessionManager);
 
-    await expect(
-      execute("tc", { id: "nope" }, undefined, undefined, createCtx()),
-    ).rejects.toThrow(/nope/);
+    await expect(execute("tc", { id: "nope" }, undefined, undefined, createCtx())).rejects.toThrow(
+      /nope/,
+    );
   });
 
   it("returns info (not error) for already-completed agent", async () => {

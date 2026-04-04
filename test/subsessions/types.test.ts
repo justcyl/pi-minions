@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
-import type { 
-  MinionSessionMetadata, 
-  MinionSessionHandle, 
-  CreateMinionSessionOptions 
+import { describe, expect, it } from "vitest";
+import type {
+  CreateMinionSessionOptions,
+  MinionSessionHandle,
+  MinionSessionMetadata,
 } from "../../src/subsessions/types.js";
 import type { AgentConfig } from "../../src/types.js";
 

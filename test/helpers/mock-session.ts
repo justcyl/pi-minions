@@ -47,9 +47,10 @@ export function createMockSession(config?: MockSessionConfig) {
 
         // Emit a turn cycle: message_start → text_delta → message_end → turn_end
         emit({ type: "message_start" });
-        const text = i === totalTurns - 1 || (respectsSteer && _steerCalls.length > 0)
-          ? finalMessage
-          : `Turn ${i + 1} working...`;
+        const text =
+          i === totalTurns - 1 || (respectsSteer && _steerCalls.length > 0)
+            ? finalMessage
+            : `Turn ${i + 1} working...`;
         emit({
           type: "message_update",
           assistantMessageEvent: { type: "text_delta", delta: text },
@@ -99,8 +100,14 @@ export function createMockSession(config?: MockSessionConfig) {
 
   return {
     session,
-    get aborted() { return _aborted; },
-    get steerCalls() { return [..._steerCalls]; },
-    get turnCount() { return _turnCount; },
+    get aborted() {
+      return _aborted;
+    },
+    get steerCalls() {
+      return [..._steerCalls];
+    },
+    get turnCount() {
+      return _turnCount;
+    },
   };
 }

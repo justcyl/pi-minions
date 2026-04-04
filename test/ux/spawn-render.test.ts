@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { createTestHarness } from "../helpers/index.js";
+import { describe, expect, it } from "vitest";
 import { renderResult } from "../../src/render.js";
+import { createTestHarness } from "../helpers/index.js";
 
 describe("spawn rendering", () => {
   it("renders spawn tool progress", async () => {
@@ -82,7 +82,7 @@ describe("MockTUI functionality", () => {
         render: (w: number) => [`Line 1 ${w}`, `Line 2 ${w}`],
         invalidate: () => {},
       } as any,
-      80
+      80,
     );
 
     expect(harness.tui.renderLog).toHaveLength(1);
@@ -99,7 +99,7 @@ describe("MockTUI functionality", () => {
         render: () => ["target content here"],
         invalidate: () => {},
       } as any,
-      80
+      80,
     );
 
     harness.tui.render(
@@ -108,12 +108,10 @@ describe("MockTUI functionality", () => {
         render: () => ["other content"],
         invalidate: () => {},
       } as any,
-      80
+      80,
     );
 
-    const frames = harness.tui.findFrames((lines) =>
-      lines.some((l) => l.includes("target"))
-    );
+    const frames = harness.tui.findFrames((lines) => lines.some((l) => l.includes("target")));
 
     expect(frames).toHaveLength(1);
     expect(frames[0]?.[0]).toContain("target");
@@ -128,7 +126,7 @@ describe("MockTUI functionality", () => {
         render: () => ["test"],
         invalidate: () => {},
       } as any,
-      80
+      80,
     );
 
     expect(harness.tui.renderLog).toHaveLength(1);
@@ -153,7 +151,15 @@ describe("minion status widget", () => {
       agentName: "test-minion",
       task: "Analyze codebase",
       status: "running" as const,
-      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: 0,
+        contextTokens: 0,
+        turns: 0,
+      },
       finalOutput: "",
       activity: "→ grep -r TODO src/",
       spinnerFrame: 0,
@@ -185,7 +191,15 @@ describe("minion status widget", () => {
       agentName: "completed-minion",
       task: "Run tests",
       status: "completed" as const,
-      usage: { input: 1500, output: 300, cacheRead: 0, cacheWrite: 0, cost: 0.0021, contextTokens: 1800, turns: 3 },
+      usage: {
+        input: 1500,
+        output: 300,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: 0.0021,
+        contextTokens: 1800,
+        turns: 3,
+      },
       finalOutput: "All tests passed!",
       spinnerFrame: 0,
     };
@@ -217,7 +231,15 @@ describe("minion status widget", () => {
       agentName: "failed-minion",
       task: "Build project",
       status: "failed" as const,
-      usage: { input: 500, output: 100, cacheRead: 0, cacheWrite: 0, cost: 0.0005, contextTokens: 600, turns: 1 },
+      usage: {
+        input: 500,
+        output: 100,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: 0.0005,
+        contextTokens: 600,
+        turns: 1,
+      },
       finalOutput: "Error: Build failed",
       spinnerFrame: 0,
     };
@@ -247,7 +269,15 @@ describe("minion status widget", () => {
       agentName: "progressive-minion",
       task: "Process data",
       status: "running" as const,
-      usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, cost: 0.0001, contextTokens: 150, turns: 1 },
+      usage: {
+        input: 100,
+        output: 50,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: 0.0001,
+        contextTokens: 150,
+        turns: 1,
+      },
       finalOutput: "",
       activity: "Processing...",
       spinnerFrame: 2,
@@ -267,7 +297,15 @@ describe("minion status widget", () => {
       ...runningDetails,
       status: "completed" as const,
       finalOutput: "Data processed successfully!",
-      usage: { input: 5000, output: 1200, cacheRead: 0, cacheWrite: 0, cost: 0.008, contextTokens: 6200, turns: 8 },
+      usage: {
+        input: 5000,
+        output: 1200,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: 0.008,
+        contextTokens: 6200,
+        turns: 8,
+      },
     };
 
     const completedText = renderResult(
@@ -301,7 +339,15 @@ describe("minion status widget", () => {
       agentName: "output-minion",
       task: "Generate report",
       status: "completed" as const,
-      usage: { input: 200, output: 500, cacheRead: 0, cacheWrite: 0, cost: 0.001, contextTokens: 700, turns: 2 },
+      usage: {
+        input: 200,
+        output: 500,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: 0.001,
+        contextTokens: 700,
+        turns: 2,
+      },
       finalOutput: "Line 1\nLine 2\nLine 3",
       spinnerFrame: 0,
     };

@@ -7,7 +7,7 @@ export class EventBus {
     if (!this.listeners.has(channel)) {
       this.listeners.set(channel, new Set());
     }
-    this.listeners.get(channel)!.add(handler as EventHandler<unknown>);
+    this.listeners.get(channel)?.add(handler as EventHandler<unknown>);
 
     return () => {
       this.listeners.get(channel)?.delete(handler as EventHandler<unknown>);

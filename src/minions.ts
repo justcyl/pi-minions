@@ -75,7 +75,8 @@ export function pickMinionName(tree: AgentTree, fallbackId: string): string {
   const inUse = new Set(tree.getRunning().map((n) => n.name));
   const available = MINION_NAMES.filter((n) => !inUse.has(n));
   if (available.length === 0) return `minion-${fallbackId}`;
-  return available[Math.floor(Math.random() * available.length)]!;
+  const picked = available[Math.floor(Math.random() * available.length)];
+  return picked ?? `minion-${fallbackId}`;
 }
 
 export const DEFAULT_MINION_PROMPT = `You are a minion — an autonomous subagent in an isolated context with no conversation history. Be concise; your output goes to a parent agent, not a human.

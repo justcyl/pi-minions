@@ -1,14 +1,22 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { readFileSync, existsSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const LOG_PATH = "/tmp/logs/pi-minions/debug.log";
 
 function cleanLog() {
-  try { if (existsSync(LOG_PATH)) unlinkSync(LOG_PATH); } catch { /* ignore */ }
+  try {
+    if (existsSync(LOG_PATH)) unlinkSync(LOG_PATH);
+  } catch {
+    /* ignore */
+  }
 }
 
 function readLog(): string {
-  try { return readFileSync(LOG_PATH, "utf-8"); } catch { return ""; }
+  try {
+    return readFileSync(LOG_PATH, "utf-8");
+  } catch {
+    return "";
+  }
 }
 
 describe("logger", () => {

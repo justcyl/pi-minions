@@ -43,7 +43,9 @@ Conventional commits: `feat:`, `fix:`, `chore:`, `docs:`, etc.
 
 ## Testing
 
-Always load `/skill:test-writer` before writing or auditing tests and follow it's guidance
+Always load `/skill:test-writer` before writing or auditing tests and follow it's guidance.
+
+If any test run parsing tools area available, ALWAYS pass it raw JSON output with `task test json=true` and then use the tool to parse the output
 
 ## Documentation
 

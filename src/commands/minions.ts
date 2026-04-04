@@ -1,12 +1,12 @@
 import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
-import type { AgentTree } from "../tree.js";
-import type { ResultQueue } from "../queue.js";
-import { validateSteerTarget, executeSteering } from "../tools/minions.js";
-import { detachMinion } from "../tools/spawn.js";
 import { logger } from "../logger.js";
-import type { SubsessionManager } from "../subsessions/manager.js";
+import type { ResultQueue } from "../queue.js";
 import type { EventBus } from "../subsessions/event-bus.js";
+import type { SubsessionManager } from "../subsessions/manager.js";
 import { showMinionObservability } from "../subsessions/observability.js";
+import { executeSteering, validateSteerTarget } from "../tools/minions.js";
+import { detachMinion } from "../tools/spawn.js";
+import type { AgentTree } from "../tree.js";
 
 type ParsedArgs =
   | { action: "list" }
@@ -20,7 +20,7 @@ export function parseMinionArgs(args: string): ParsedArgs {
 
   if (tokens.length === 0) return { action: "list" };
 
-  const action = tokens[0]!;
+  const action = tokens[0];
 
   if (action === "list") return { action: "list" };
 
@@ -44,12 +44,14 @@ export function parseMinionArgs(args: string): ParsedArgs {
     if (tokens.length < 3) {
       return { error: "Usage: /minions steer <id | name> <message>" };
     }
-    const target = tokens[1]!;
+    const target = tokens[1] ?? "";
     const message = tokens.slice(2).join(" ");
     return { action: "steer", target, message };
   }
 
-  return { error: `Unknown subcommand: ${action}. Use list, show, bg, or steer.` };
+  return {
+    error: `Unknown subcommand: ${action}. Use list, show, bg, or steer.`,
+  };
 }
 
 // Get alphabetically sorted list of running minions
@@ -58,7 +60,7 @@ function getSortedMinionIds(tree: AgentTree): string[] {
   return running
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name))
-    .map(m => m.id);
+    .map((m) => m.id);
 }
 
 // Show minion observability with cycling support
@@ -90,15 +92,9 @@ async function showMinionWithCycling(
     logger.debug("minions:cmd", "opening-observability", { currentId });
 
     let nextId: string | null = null;
-    const result = await showMinionObservability(
-      ctx,
-      tree,
-      eventBus,
-      currentId,
-      (direction) => {
-        nextId = cycleToMinion(currentId!, direction);
-      }
-    );
+    const result = await showMinionObservability(ctx, tree, eventBus, currentId, (direction) => {
+      nextId = currentId ? cycleToMinion(currentId, direction) : null;
+    });
 
     if (result.action === "close") {
       logger.debug("minions:cmd", "observability-closed");
@@ -141,7 +137,7 @@ export function createMinionsHandler(
         return;
       }
 
-      await showMinionWithCycling(ctx, tree, eventBus, sortedIds[0]!);
+      await showMinionWithCycling(ctx, tree, eventBus, sortedIds[0] ?? "");
       return;
     }
 
@@ -164,7 +160,11 @@ export function createMinionsHandler(
         return;
       }
 
-      const successMessage = await executeSteering(validation.node, validation.steer, parsed.message);
+      const successMessage = await executeSteering(
+        validation.node,
+        validation.steer,
+        parsed.message,
+      );
       ctx.ui.notify(successMessage, "info");
       return;
     }
@@ -179,7 +179,10 @@ export function createMinionsHandler(
         return;
       }
       if (node.status !== "running") {
-        ctx.ui.notify(`Minion ${node.name} (${node.id}) is not running (status: ${node.status}).`, "info");
+        ctx.ui.notify(
+          `Minion ${node.name} (${node.id}) is not running (status: ${node.status}).`,
+          "info",
+        );
         return;
       }
 
@@ -190,11 +193,17 @@ export function createMinionsHandler(
         return;
       }
 
-      logger.debug("minions:cmd", "bg-detaching", { id: node.id, name: node.name });
+      logger.debug("minions:cmd", "bg-detaching", {
+        id: node.id,
+        name: node.name,
+      });
       detachMinion(node.id);
       // Mark as detached for [fg]/[bg] badge (deviation 10)
       tree.markDetached(node.id);
-      logger.debug("minions:cmd", "bg-detached", { id: node.id, name: node.name });
+      logger.debug("minions:cmd", "bg-detached", {
+        id: node.id,
+        name: node.name,
+      });
       ctx.ui.notify(`Sent ${node.name} (${node.id}) to background.`, "info");
       return;
     }

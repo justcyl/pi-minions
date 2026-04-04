@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { AgentTree } from "../../src/tree.js";
-import { SubsessionManager } from "../../src/subsessions/manager.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createHaltHandler } from "../../src/commands/halt.js";
+import type { SubsessionManager } from "../../src/subsessions/manager.js";
+import { AgentTree } from "../../src/tree.js";
 
 function createCtx(notifyFn = vi.fn()) {
   return { ui: { notify: notifyFn }, cwd: "/tmp" } as any;
@@ -20,7 +20,13 @@ function mockSession() {
     steer: vi.fn().mockResolvedValue(undefined),
     state: { messages: [] },
     getSessionStats: vi.fn().mockReturnValue({
-      tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+      tokens: {
+        input: 100,
+        output: 50,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 150,
+      },
       cost: 0.001,
     }),
   };
@@ -68,8 +74,8 @@ describe("createHaltHandler", () => {
 
     await handler("all", createCtx(notify));
 
-    expect(tree.get("a")!.status).toBe("aborted");
-    expect(tree.get("b")!.status).toBe("aborted");
+    expect(tree.get("a")?.status).toBe("aborted");
+    expect(tree.get("b")?.status).toBe("aborted");
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("2"), "info");
   });
 
@@ -81,7 +87,7 @@ describe("createHaltHandler", () => {
 
     await handler("abc123", createCtx(notify));
 
-    expect(tree.get("abc123")!.status).toBe("aborted");
+    expect(tree.get("abc123")?.status).toBe("aborted");
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("abc123"), "info");
   });
 

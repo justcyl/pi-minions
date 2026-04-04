@@ -1,8 +1,16 @@
-import { describe, it, expect, vi } from "vitest";
-import { AgentTree } from "../../src/tree.js";
+import { describe, expect, it, vi } from "vitest";
 import { ResultQueue } from "../../src/queue.js";
-import { SubsessionManager } from "../../src/subsessions/manager.js";
-import { listMinions, showMinion, steerMinion, buildListMinionsText, buildShowMinionText, validateSteerTarget, executeSteering } from "../../src/tools/minions.js";
+import type { SubsessionManager } from "../../src/subsessions/manager.js";
+import {
+  buildListMinionsText,
+  buildShowMinionText,
+  executeSteering,
+  listMinions,
+  showMinion,
+  steerMinion,
+  validateSteerTarget,
+} from "../../src/tools/minions.js";
+import { AgentTree } from "../../src/tree.js";
 import { emptyUsage } from "../../src/types.js";
 
 function createMockSubsessionManager(sessions: Map<string, any> = new Map()) {
@@ -21,14 +29,25 @@ function mockSession() {
     steer: vi.fn().mockResolvedValue(undefined),
     state: { messages: [] },
     getSessionStats: vi.fn().mockReturnValue({
-      tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+      tokens: {
+        input: 100,
+        output: 50,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 150,
+      },
       cost: 0.001,
     }),
   };
 }
 
 function createCtx() {
-  return { cwd: "/tmp", modelRegistry: {}, model: undefined, ui: { setWorkingMessage: vi.fn() } } as any;
+  return {
+    cwd: "/tmp",
+    modelRegistry: {},
+    model: undefined,
+    ui: { setWorkingMessage: vi.fn() },
+  } as any;
 }
 
 describe("listMinions", () => {
@@ -73,9 +92,15 @@ describe("listMinions", () => {
     const subsessionManager = createMockSubsessionManager(sessions);
 
     queue.add({
-      id: "x", name: "mel", task: "do stuff", output: "done",
-      usage: emptyUsage(), status: "pending", completedAt: Date.now(),
-      duration: 1000, exitCode: 0,
+      id: "x",
+      name: "mel",
+      task: "do stuff",
+      output: "done",
+      usage: emptyUsage(),
+      status: "pending",
+      completedAt: Date.now(),
+      duration: 1000,
+      exitCode: 0,
     });
 
     const execute = listMinions(tree, queue, subsessionManager);
@@ -121,9 +146,15 @@ describe("showMinion", () => {
     tree.updateStatus("a", "completed", 0);
 
     queue.add({
-      id: "a", name: "kevin", task: "analyze code", output: "found 3 TODOs",
-      usage: emptyUsage(), status: "pending", completedAt: Date.now(),
-      duration: 5000, exitCode: 0,
+      id: "a",
+      name: "kevin",
+      task: "analyze code",
+      output: "found 3 TODOs",
+      usage: emptyUsage(),
+      status: "pending",
+      completedAt: Date.now(),
+      duration: 5000,
+      exitCode: 0,
     });
 
     const execute = showMinion(tree, queue);
@@ -193,8 +224,11 @@ describe("steerMinion", () => {
 
     const execute = steerMinion(tree, subsessionManager);
     const result = await execute(
-      "tc-1", { target: "kevin", message: "restart the count" },
-      undefined, undefined, createCtx(),
+      "tc-1",
+      { target: "kevin", message: "restart the count" },
+      undefined,
+      undefined,
+      createCtx(),
     );
     const text = (result.content[0] as any).text;
 
@@ -251,9 +285,15 @@ describe("buildListMinionsText", () => {
     const subsessionManager = createMockSubsessionManager(sessions);
 
     queue.add({
-      id: "x", name: "mel", task: "do stuff", output: "done",
-      usage: emptyUsage(), status: "pending", completedAt: Date.now(),
-      duration: 1000, exitCode: 0,
+      id: "x",
+      name: "mel",
+      task: "do stuff",
+      output: "done",
+      usage: emptyUsage(),
+      status: "pending",
+      completedAt: Date.now(),
+      duration: 1000,
+      exitCode: 0,
     });
 
     const text = buildListMinionsText(tree, queue, subsessionManager);

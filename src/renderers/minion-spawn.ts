@@ -1,22 +1,16 @@
 import type { MessageRenderer, MessageRenderOptions, Theme } from "@mariozechner/pi-coding-agent";
 import type { Component } from "@mariozechner/pi-tui";
 import { Text } from "@mariozechner/pi-tui";
-import type { SpawnToolDetails } from "../tools/spawn.js";
-import { logger } from "../logger.js";
 import { formatUsage } from "../render.js";
+import type { SpawnToolDetails } from "../tools/spawn.js";
 
 // const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const SPINNER = [
-  '[oo]', '[oo]', '[oo]',
-  '[oo]', '[o-]', '[--]',
-  '[--]', '[-o]', '[oo]',
-  '[oo]'
-];
+const SPINNER = ["[oo]", "[oo]", "[oo]", "[oo]", "[o-]", "[--]", "[--]", "[-o]", "[oo]", "[oo]"];
 
 export const minionSpawnRenderer: MessageRenderer<SpawnToolDetails> = (
   message,
   options: MessageRenderOptions,
-  theme: Theme
+  theme: Theme,
 ): Component | undefined => {
   const data = message.details;
   if (!data) {
@@ -65,10 +59,7 @@ export const minionSpawnRenderer: MessageRenderer<SpawnToolDetails> = (
 
   // Expanded output preview
   if (options.expanded && data.finalOutput) {
-    const body = data.finalOutput
-      .split("\n")
-      .slice(0, 20)
-      .join("\n");
+    const body = data.finalOutput.split("\n").slice(0, 20).join("\n");
     return new Text(`${header}\n${theme.fg("toolOutput", body)}`, 0, 0);
   }
 

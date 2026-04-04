@@ -1,4 +1,8 @@
-import type { MinionSessionMetadata, MinionSessionHandle, CreateMinionSessionOptions } from "../../src/subsessions/types.js";
+import type {
+  CreateMinionSessionOptions,
+  MinionSessionHandle,
+  MinionSessionMetadata,
+} from "../../src/subsessions/types.js";
 
 export class MockSubsessionManager {
   private sessions = new Map<string, MockAgentSession>();
@@ -42,7 +46,12 @@ export class MockSubsessionManager {
     return this.sessions.get(id);
   }
 
-  updateStatus(id: string, status: MinionSessionMetadata["status"], exitCode?: number, error?: string): void {
+  updateStatus(
+    id: string,
+    status: MinionSessionMetadata["status"],
+    exitCode?: number,
+    error?: string,
+  ): void {
     const meta = this.metadata.get(id);
     if (!meta) return;
 
@@ -80,7 +89,9 @@ export class MockAgentSession {
 
   subscribe(listener: (event: unknown) => void): () => void {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   async steer(text: string): Promise<void> {
@@ -89,7 +100,10 @@ export class MockAgentSession {
     this.emit({ type: "message_start" });
     this.emit({
       type: "message_update",
-      assistantMessageEvent: { type: "text_delta", delta: `Steer received: ${text}` },
+      assistantMessageEvent: {
+        type: "text_delta",
+        delta: `Steer received: ${text}`,
+      },
     });
     this.emit({ type: "message_end" });
   }

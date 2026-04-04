@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SubsessionManager } from "../../src/subsessions/manager.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../../src/subsessions/event-bus.js";
+import { SubsessionManager } from "../../src/subsessions/manager.js";
 import { getMinionsDir } from "../../src/subsessions/paths.js";
 import type { MinionSessionMetadata } from "../../src/subsessions/types.js";
 
@@ -16,7 +16,13 @@ vi.mock("@mariozechner/pi-coding-agent", () => {
     prompt: vi.fn().mockResolvedValue(undefined),
     state: { messages: [] },
     getSessionStats: vi.fn().mockReturnValue({
-      tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+      tokens: {
+        input: 100,
+        output: 50,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 150,
+      },
       cost: 0.001,
     }),
   };
@@ -106,7 +112,7 @@ describe("SubsessionManager", () => {
       });
 
       // Wait for async completion
-      await new Promise(r => setTimeout(r, 10));
+      await new Promise((r) => setTimeout(r, 10));
 
       // Verify mock was called
       const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
@@ -188,7 +194,7 @@ describe("SubsessionManager", () => {
       // getMetadata should return cached data for created sessions
       const meta1 = manager.getMetadata("test-1");
       const meta2 = manager.getMetadata("test-2");
-      
+
       expect(meta1).toBeDefined();
       expect(meta2).toBeDefined();
       expect(meta1?.sessionId).toBe("test-1");
@@ -239,10 +245,10 @@ describe("SubsessionManager", () => {
       // Given a minion session file exists with metadata
       const minionsDir = getMinionsDir(tempDir);
       mkdirSync(minionsDir, { recursive: true });
-      
+
       const sessionFile = join(minionsDir, "2026-04-02T22-46-54-session.jsonl");
       writeFileSync(sessionFile, '{"type":"session"}\n');
-      
+
       const metadata: MinionSessionMetadata = {
         sessionId: "minion-abc",
         parentSession: join(tempDir, "parent.jsonl"),
@@ -276,10 +282,10 @@ describe("SubsessionManager", () => {
       // Given a minion session file exists with metadata
       const minionsDir = getMinionsDir(tempDir);
       mkdirSync(minionsDir, { recursive: true });
-      
+
       const sessionFile = join(minionsDir, "2026-04-02T22-46-54-session.jsonl");
       writeFileSync(sessionFile, '{"type":"session"}\n');
-      
+
       const metadata: MinionSessionMetadata = {
         sessionId: "minion-xyz",
         parentSession: join(tempDir, "parent.jsonl"),
@@ -315,18 +321,30 @@ describe("SubsessionManager", () => {
       let capturedSubscriber: ((event: any) => void) | undefined;
 
       const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
-      vi.mocked(createAgentSession).mockImplementationOnce(async () => ({
-        session: {
-          subscribe: (cb: (event: any) => void) => { capturedSubscriber = cb; return () => {}; },
-          abort: vi.fn(),
-          prompt: vi.fn().mockResolvedValue(undefined),
-          state: { messages: [] },
-          getSessionStats: vi.fn().mockReturnValue({
-            tokens: { input: 200, output: 80, cacheRead: 10, cacheWrite: 5, total: 290 },
-            cost: 0.005,
-          }),
-        },
-      }) as any);
+      vi.mocked(createAgentSession).mockImplementationOnce(
+        async () =>
+          ({
+            session: {
+              subscribe: (cb: (event: any) => void) => {
+                capturedSubscriber = cb;
+                return () => {};
+              },
+              abort: vi.fn(),
+              prompt: vi.fn().mockResolvedValue(undefined),
+              state: { messages: [] },
+              getSessionStats: vi.fn().mockReturnValue({
+                tokens: {
+                  input: 200,
+                  output: 80,
+                  cacheRead: 10,
+                  cacheWrite: 5,
+                  total: 290,
+                },
+                cost: 0.005,
+              }),
+            },
+          }) as any,
+      );
 
       const onUsageUpdate = vi.fn();
       await manager.create({
@@ -347,7 +365,7 @@ describe("SubsessionManager", () => {
       });
 
       expect(capturedSubscriber).toBeDefined();
-      capturedSubscriber!({ type: "turn_end" });
+      capturedSubscriber?.({ type: "turn_end" });
 
       expect(onUsageUpdate).toHaveBeenCalledWith({
         input: 200,
@@ -362,18 +380,30 @@ describe("SubsessionManager", () => {
       let capturedSubscriber: ((event: any) => void) | undefined;
 
       const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
-      vi.mocked(createAgentSession).mockImplementationOnce(async () => ({
-        session: {
-          subscribe: (cb: (event: any) => void) => { capturedSubscriber = cb; return () => {}; },
-          abort: vi.fn(),
-          prompt: vi.fn().mockResolvedValue(undefined),
-          state: { messages: [] },
-          getSessionStats: vi.fn().mockReturnValue({
-            tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
-            cost: 0.001,
-          }),
-        },
-      }) as any);
+      vi.mocked(createAgentSession).mockImplementationOnce(
+        async () =>
+          ({
+            session: {
+              subscribe: (cb: (event: any) => void) => {
+                capturedSubscriber = cb;
+                return () => {};
+              },
+              abort: vi.fn(),
+              prompt: vi.fn().mockResolvedValue(undefined),
+              state: { messages: [] },
+              getSessionStats: vi.fn().mockReturnValue({
+                tokens: {
+                  input: 100,
+                  output: 50,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: 150,
+                },
+                cost: 0.001,
+              }),
+            },
+          }) as any,
+      );
 
       await manager.create({
         id: "no-cb-test",
@@ -401,10 +431,10 @@ describe("SubsessionManager", () => {
       // Given a minion session with parent relationship
       const minionsDir = getMinionsDir(tempDir);
       mkdirSync(minionsDir, { recursive: true });
-      
+
       const sessionFile = join(minionsDir, "2026-04-02T22-46-54-session.jsonl");
       writeFileSync(sessionFile, '{"type":"session"}\n');
-      
+
       const metadata: MinionSessionMetadata = {
         sessionId: "minion-123",
         parentSession: join(tempDir, "parent.jsonl"),

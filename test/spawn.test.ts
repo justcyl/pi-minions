@@ -5,9 +5,9 @@
  * observable outcomes — exit codes, steer calls, abort state, usage — not
  * internal implementation details.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createMockSession, type MockSessionConfig } from "./helpers/mock-session.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentTree } from "../src/tree.js";
+import { createMockSession, type MockSessionConfig } from "./helpers/mock-session.js";
 
 // Mock the SDK — swap in a controllable session per test
 
@@ -16,7 +16,6 @@ let currentMock: ReturnType<typeof createMockSession>;
 vi.mock("@mariozechner/pi-coding-agent", () => ({
   createAgentSession: async () => ({ session: currentMock.session }),
   DefaultResourceLoader: class {
-    constructor() {}
     async reload() {}
   },
   SessionManager: {
@@ -102,14 +101,22 @@ describe("timeout enforcement", () => {
 
   it("steers the session with TIMEOUT message when timeout fires mid-run", async () => {
     // 80 ms timeout, 50 ms per turn → fires during turn 2
-    const mock = setup({ totalTurns: 10, turnDelayMs: 50, respectsSteer: true });
+    const mock = setup({
+      totalTurns: 10,
+      turnDelayMs: 50,
+      respectsSteer: true,
+    });
     await runMinionSession(makeConfig({ timeout: 80 }), "do something", baseOpts);
     expect(mock.steerCalls.length).toBeGreaterThanOrEqual(1);
     expect(mock.steerCalls[0]).toContain("TIMEOUT REACHED");
   });
 
   it("completes successfully (exit 0) when the session respects the timeout steer", async () => {
-    const mock = setup({ totalTurns: 10, turnDelayMs: 50, respectsSteer: true });
+    const mock = setup({
+      totalTurns: 10,
+      turnDelayMs: 50,
+      respectsSteer: true,
+    });
     const result = await runMinionSession(makeConfig({ timeout: 80 }), "do something", baseOpts);
     expect(result.exitCode).toBe(0);
     expect(mock.aborted).toBe(false);
@@ -118,9 +125,7 @@ describe("timeout enforcement", () => {
   it("force-aborts after the 30s grace period when the session ignores the timeout steer", async () => {
     vi.useFakeTimers();
     setup({ totalTurns: 500, turnDelayMs: 100, respectsSteer: false });
-    const resultPromise = runMinionSession(
-      makeConfig({ timeout: 100 }), "do something", baseOpts,
-    );
+    const resultPromise = runMinionSession(makeConfig({ timeout: 100 }), "do something", baseOpts);
     await vi.advanceTimersByTimeAsync(31_000);
     const result = await resultPromise;
     expect(result.exitCode).toBe(1);
@@ -136,7 +141,11 @@ describe("timeout enforcement", () => {
 
   it("respects PI_MINIONS_TIMEOUT environment variable", async () => {
     vi.stubEnv("PI_MINIONS_TIMEOUT", "80");
-    const mock = setup({ totalTurns: 10, turnDelayMs: 50, respectsSteer: true });
+    const mock = setup({
+      totalTurns: 10,
+      turnDelayMs: 50,
+      respectsSteer: true,
+    });
     await runMinionSession(makeConfig(), "do something", baseOpts);
     expect(mock.steerCalls.length).toBeGreaterThanOrEqual(1);
     expect(mock.steerCalls[0]).toContain("TIMEOUT REACHED");
@@ -144,7 +153,11 @@ describe("timeout enforcement", () => {
 
   it("per-agent timeout takes precedence over PI_MINIONS_TIMEOUT", async () => {
     vi.stubEnv("PI_MINIONS_TIMEOUT", "5000"); // global is long
-    const mock = setup({ totalTurns: 10, turnDelayMs: 50, respectsSteer: true });
+    const mock = setup({
+      totalTurns: 10,
+      turnDelayMs: 50,
+      respectsSteer: true,
+    });
     await runMinionSession(makeConfig({ timeout: 80 }), "do something", baseOpts); // agent is short
     expect(mock.steerCalls.length).toBeGreaterThanOrEqual(1);
     expect(mock.steerCalls[0]).toContain("TIMEOUT REACHED");
@@ -158,9 +171,10 @@ describe("halt via abort signal", () => {
     const mock = setup({ totalTurns: 10, turnDelayMs: 10 });
     const controller = new AbortController();
 
-    const resultPromise = runMinionSession(
-      makeConfig(), "do something", { ...baseOpts, signal: controller.signal },
-    );
+    const resultPromise = runMinionSession(makeConfig(), "do something", {
+      ...baseOpts,
+      signal: controller.signal,
+    });
     await new Promise((r) => setTimeout(r, 20)); // let session start
     controller.abort();
     const result = await resultPromise;
@@ -183,9 +197,9 @@ describe("live usage propagation", () => {
     // One call per turn (3 turns)
     expect(usageUpdates.length).toBe(3);
     // getSessionStats() in the mock returns input:100, output:50, cost:0.001
-    expect(usageUpdates[0]!.input).toBe(100);
-    expect(usageUpdates[0]!.output).toBe(50);
-    expect(usageUpdates[0]!.cost).toBe(0.001);
+    expect(usageUpdates[0]?.input).toBe(100);
+    expect(usageUpdates[0]?.output).toBe(50);
+    expect(usageUpdates[0]?.cost).toBe(0.001);
   });
 
   it("updates the tree node usage after each turn when tree is provided", async () => {
@@ -194,7 +208,11 @@ describe("live usage propagation", () => {
     const id = "live-usage-node";
     tree.add(id, "test", "do something");
 
-    await runMinionSession(makeConfig(), "do something", { ...baseOpts, id, tree });
+    await runMinionSession(makeConfig(), "do something", {
+      ...baseOpts,
+      id,
+      tree,
+    });
 
     const node = tree.get(id)!;
     expect(node.usage.input).toBe(100);

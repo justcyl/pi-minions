@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ResultQueue } from "../src/queue.js";
 import type { QueuedResult } from "../src/types.js";
 import { emptyUsage } from "../src/types.js";
@@ -52,7 +52,7 @@ describe("ResultQueue", () => {
     const q = new ResultQueue();
     q.add(createResult({ id: "a", status: "accepted" }));
     q.accept("a");
-    expect(q.get("a")!.status).toBe("accepted");
+    expect(q.get("a")?.status).toBe("accepted");
   });
 
   it("accept is no-op for unknown id", () => {

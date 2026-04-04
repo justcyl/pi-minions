@@ -11,7 +11,11 @@ export class MockTUI {
 
   render(component: Component, width: number): string[] {
     const lines = component.render(width);
-    this.renderLog.push({ component: component.constructor.name, lines, width });
+    this.renderLog.push({
+      component: component.constructor.name,
+      lines,
+      width,
+    });
     return lines;
   }
 
@@ -20,9 +24,7 @@ export class MockTUI {
   }
 
   findFrames(predicate: (lines: string[]) => boolean): string[][] {
-    return this.renderLog
-      .filter((entry) => predicate(entry.lines))
-      .map((entry) => entry.lines);
+    return this.renderLog.filter((entry) => predicate(entry.lines)).map((entry) => entry.lines);
   }
 
   clear(): void {

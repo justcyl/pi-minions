@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { buildFooterFactory } from "../src/footer.js";
 import { AgentTree } from "../src/tree.js";
 
@@ -34,16 +34,24 @@ function makeEntry(input: number, output: number, cost: number) {
   };
 }
 
-function makeCtx(entries: any[] = [], contextUsage?: { percent: number; tokens: number; contextWindow: number }) {
+function makeCtx(
+  entries: any[] = [],
+  contextUsage?: { percent: number; tokens: number; contextWindow: number },
+) {
   return {
     sessionManager: {
       getEntries: () => entries,
       getCwd: () => "/home/testuser/project",
       getSessionName: () => undefined,
     },
-    getContextUsage: () => contextUsage
-      ? { tokens: contextUsage.tokens, contextWindow: contextUsage.contextWindow, percent: contextUsage.percent }
-      : undefined,
+    getContextUsage: () =>
+      contextUsage
+        ? {
+            tokens: contextUsage.tokens,
+            contextWindow: contextUsage.contextWindow,
+            percent: contextUsage.percent,
+          }
+        : undefined,
     modelRegistry: {
       isUsingOAuth: () => false,
     },

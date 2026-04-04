@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadAgentsFromDir, discoverAgents } from "../src/agents.js";
+import { describe, expect, it } from "vitest";
+import { discoverAgents, loadAgentsFromDir } from "../src/agents.js";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "agents");
 
@@ -28,59 +28,59 @@ describe("loadAgentsFromDir", () => {
     const agents = loadAgentsFromDir(FIXTURES, "user");
     const scout = agents.find((a) => a.name === "scout");
     expect(scout).toBeDefined();
-    expect(scout!.description).toBe("Fast codebase recon");
+    expect(scout?.description).toBe("Fast codebase recon");
   });
 
   it("parses tools as trimmed string array", () => {
     const agents = loadAgentsFromDir(FIXTURES, "user");
     const scout = agents.find((a) => a.name === "scout");
-    expect(scout!.tools).toEqual(["read", "grep", "find", "ls", "bash"]);
+    expect(scout?.tools).toEqual(["read", "grep", "find", "ls", "bash"]);
   });
 
   it("leaves tools undefined when not specified", () => {
     const agents = loadAgentsFromDir(FIXTURES, "user");
     const worker = agents.find((a) => a.name === "worker");
-    expect(worker!.tools).toBeUndefined();
+    expect(worker?.tools).toBeUndefined();
   });
 
   it("parses model field", () => {
     const agents = loadAgentsFromDir(FIXTURES, "user");
     const scout = agents.find((a) => a.name === "scout");
-    expect(scout!.model).toBe("claude-haiku-4-5");
+    expect(scout?.model).toBe("claude-haiku-4-5");
   });
 
   it("leaves model undefined when not specified", () => {
     const agents = loadAgentsFromDir(FIXTURES, "user");
     const worker = agents.find((a) => a.name === "worker");
-    expect(worker!.model).toBeUndefined();
+    expect(worker?.model).toBeUndefined();
   });
 
   it("parses thinking field", () => {
     const agents = loadAgentsFromDir(FIXTURES, "user");
     const scout = agents.find((a) => a.name === "scout");
-    expect(scout!.thinking).toBe("low");
+    expect(scout?.thinking).toBe("low");
   });
 
   it("parses steps as number", () => {
     const agents = loadAgentsFromDir(FIXTURES, "user");
     const thinker = agents.find((a) => a.name === "thinker");
-    expect(thinker!.steps).toBe(30);
+    expect(thinker?.steps).toBe(30);
   });
 
   it("parses steps from opencode-compat agents", () => {
     const agents = loadAgentsFromDir(FIXTURES, "user");
     const researcher = agents.find((a) => a.name === "researcher");
     expect(researcher).toBeDefined();
-    expect(researcher!.steps).toBe(30);
+    expect(researcher?.steps).toBe(30);
   });
 
   it("silently ignores unknown opencode frontmatter fields", () => {
     const agents = loadAgentsFromDir(FIXTURES, "user");
     const researcher = agents.find((a) => a.name === "researcher");
     expect(researcher).toBeDefined();
-    expect(researcher!.description).toBe("Research agent");
+    expect(researcher?.description).toBe("Research agent");
     // Extra fields from opencode (mode, temperature, color) must not throw
-    expect(researcher!.model).toBe("claude-sonnet-4-5");
+    expect(researcher?.model).toBe("claude-sonnet-4-5");
   });
 
   it("sets source on each agent", () => {
@@ -96,7 +96,7 @@ describe("loadAgentsFromDir", () => {
   it("body after frontmatter becomes systemPrompt", () => {
     const agents = loadAgentsFromDir(FIXTURES, "user");
     const scout = agents.find((a) => a.name === "scout");
-    expect(scout!.systemPrompt.trim()).toBe("You are a scout.");
+    expect(scout?.systemPrompt.trim()).toBe("You are a scout.");
   });
 });
 
@@ -148,8 +148,8 @@ describe("discoverAgents scope", () => {
     const { agents } = discoverAgents(tmpBase, "project");
     const helper = agents.find((a) => a.name === "helper");
     expect(helper).toBeDefined();
-    expect(helper!.description).toBe("Dot-agents helper");
-    expect(helper!.source).toBe("project");
+    expect(helper?.description).toBe("Dot-agents helper");
+    expect(helper?.source).toBe("project");
 
     rmSync(tmpBase, { recursive: true, force: true });
   });

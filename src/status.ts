@@ -1,7 +1,7 @@
 import type { ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
-import type { AgentTree } from "./tree.js";
-import type { SubsessionManager } from "./subsessions/manager.js";
 import { logger } from "./logger.js";
+import type { SubsessionManager } from "./subsessions/manager.js";
+import type { AgentTree } from "./tree.js";
 
 export const MINIONS_STATUS_KEY = "minions-status";
 
@@ -9,10 +9,7 @@ export const MINIONS_STATUS_KEY = "minions-status";
 const HINT_ROTATION_INTERVAL = 4000;
 
 // Static hints (always available)
-const STATIC_HINTS = [
-  "/minions",
-  "/minions list",
-];
+const STATIC_HINTS = ["/minions", "/minions list"];
 
 export interface StatusTracker {
   refresh(): void;
@@ -72,7 +69,9 @@ export function createStatusTracker(
       logger.debug("status", "rotation-already-running");
       return;
     }
-    logger.debug("status", "rotation-start", { interval: HINT_ROTATION_INTERVAL });
+    logger.debug("status", "rotation-start", {
+      interval: HINT_ROTATION_INTERVAL,
+    });
     hintRotationTimer = setInterval(() => {
       currentHintIndex++;
       logger.debug("status", "rotation-tick", { index: currentHintIndex });
@@ -96,12 +95,7 @@ export function createStatusTracker(
   /**
    * Format the status line: [oo] bg: <count>   ·   <hint>
    */
-  function formatStatus(
-    bgCount: number,
-    fgCount: number,
-    hint: string,
-    theme: Theme,
-  ): string {
+  function formatStatus(bgCount: number, fgCount: number, hint: string, theme: Theme): string {
     const parts: string[] = [];
 
     // Only show count if there are minions
@@ -130,9 +124,7 @@ export function createStatusTracker(
     const allRunning = tree.getRunning();
 
     // Background: marked as detached = running in background
-    const bgRunning = allRunning
-      .filter((n) => n.detached)
-      .map((n) => ({ id: n.id, name: n.name }));
+    const bgRunning = allRunning.filter((n) => n.detached).map((n) => ({ id: n.id, name: n.name }));
     const bgCount = bgRunning.length;
 
     // Foreground: not marked as detached = can be detached
@@ -164,7 +156,9 @@ export function createStatusTracker(
       if (totalMinions > 0) {
         startHintRotation();
       } else {
-        logger.debug("status", "rotation-stop-trigger", { reason: "no-minions" });
+        logger.debug("status", "rotation-stop-trigger", {
+          reason: "no-minions",
+        });
         stopHintRotation();
       }
     }

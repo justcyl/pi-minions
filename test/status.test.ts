@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStatusTracker, MINIONS_STATUS_KEY } from "../src/status.js";
+import type { SubsessionManager } from "../src/subsessions/manager.js";
 import { AgentTree } from "../src/tree.js";
-import { SubsessionManager } from "../src/subsessions/manager.js";
 
 // Minimal theme stub
 const theme = {

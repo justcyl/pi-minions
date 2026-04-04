@@ -44,6 +44,7 @@ tasks:
         echo ""
         echo "  task test        run unit tests"
         echo "  task typecheck   TypeScript type check"
+        echo "  task style       lint, format, and type check"
         echo "  task dev         load extension into pi"
         echo "  task test:e2e    smoke test in pi print mode"
 
@@ -84,6 +85,27 @@ tasks:
     desc: "Run TypeScript type checker"
     cmds:
       - npx tsc --noEmit
+
+  style:
+    desc: "Run linter, auto-format code, and type check"
+    cmds:
+      - |
+        echo "==> Running Biome linter and formatter..."
+        npx @biomejs/biome check --write --unsafe --no-errors-on-unmatched ./src ./test
+        biome_exit=$?
+
+        echo ""
+        echo "==> Running TypeScript type checker..."
+        npx tsc --noEmit
+        tsc_exit=$?
+
+        echo ""
+        if [ $biome_exit -ne 0 ] || [ $tsc_exit -ne 0 ]; then
+          echo "✗ Style check failed"
+          exit 1
+        else
+          echo "✓ Style check passed"
+        fi
 
   test:
     desc: "Run unit tests"

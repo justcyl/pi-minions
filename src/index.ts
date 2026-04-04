@@ -1,41 +1,46 @@
-import type { ExtensionAPI, ExtensionContext, BeforeAgentStartEvent } from "@mariozechner/pi-coding-agent";
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { Model } from "@mariozechner/pi-ai";
-import { AgentTree } from "./tree.js";
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { createHaltHandler } from "./commands/halt.js";
+import { createMinionsHandler } from "./commands/minions.js";
+import { createSpawnHandler } from "./commands/spawn.js";
+import { buildFooterFactory } from "./footer.js";
+import { LOG_FILE, logger } from "./logger.js";
 import { ResultQueue } from "./queue.js";
-import { SpawnToolParams, SpawnBgToolParams, spawn, spawnBg } from "./tools/spawn.js";
+import { renderCall, renderResult } from "./render.js";
+import { minionSpawnRenderer } from "./renderers/minion-spawn.js";
+import { createStatusTracker } from "./status.js";
+import { EventBus } from "./subsessions/event-bus.js";
+import { SubsessionManager } from "./subsessions/manager.js";
+import { getTempSessionPath } from "./subsessions/paths.js";
 import { HaltToolParams, halt } from "./tools/halt.js";
 import { ListAgentsParams, listAgents } from "./tools/list-agents.js";
 import {
-  ListMinionsParams, listMinions,
-  SteerMinionParams, steerMinion,
+  ListMinionsParams,
+  listMinions,
   ShowMinionParams,
+  SteerMinionParams,
   showMinion,
+  steerMinion,
 } from "./tools/minions.js";
-import { createSpawnHandler } from "./commands/spawn.js";
-import { createHaltHandler } from "./commands/halt.js";
-import { createMinionsHandler } from "./commands/minions.js";
-import { renderCall, renderResult } from "./render.js";
-import { buildFooterFactory } from "./footer.js";
-import { createStatusTracker } from "./status.js";
-import { logger, LOG_FILE } from "./logger.js";
-import { SubsessionManager } from "./subsessions/manager.js";
-import { EventBus } from "./subsessions/event-bus.js";
-import { getTempSessionPath } from "./subsessions/paths.js";
-import { minionSpawnRenderer } from "./renderers/minion-spawn.js";
-import { AgentMessage } from "@mariozechner/pi-agent-core";
+import { SpawnBgToolParams, SpawnToolParams, spawn, spawnBg } from "./tools/spawn.js";
+import { AgentTree } from "./tree.js";
 
 function createDelegationHint(toolCallCount: number): string {
-  return "\n\nDELEGATION REMINDER: You have made: " + toolCallCount +
-        " tool calls. The pi-minions extension is active and provides tools for parallel execution and work delegation." +
-        "\nDELEGATE independent subtasks to minions for faster, isolated processing using the `spawn` and `spawn_bg` tools." +
-        "\nUSE any delegation skills you have available through the system.\n" +
-        "\nALWAYS acknowledge this reminder when you receive it and review your delegation strategy before making further tool calls.\n";
+  return (
+    "\n\nDELEGATION REMINDER: You have made: " +
+    toolCallCount +
+    " tool calls. The pi-minions extension is active and provides tools for parallel execution and work delegation." +
+    "\nDELEGATE independent subtasks to minions for faster, isolated processing using the `spawn` and `spawn_bg` tools." +
+    "\nUSE any delegation skills you have available through the system.\n" +
+    "\nALWAYS acknowledge this reminder when you receive it and review your delegation strategy before making further tool calls.\n"
+  );
 }
 
 function buildPromptFromContext(messages: AgentMessage[]): string {
   return messages
-    .filter(msg => msg.role === "user")
-    .map(msg => typeof msg.content === "string" ? msg.content : "")
+    .filter((msg) => msg.role === "user")
+    .map((msg) => (typeof msg.content === "string" ? msg.content : ""))
     .join("\n");
 }
 
@@ -53,6 +58,7 @@ export default function (pi: ExtensionAPI): void {
   let statusTracker: ReturnType<typeof createStatusTracker> | undefined;
   let cachedUi: ExtensionContext["ui"] | null = null;
   let cachedCtx: ExtensionContext | null = null;
+  // biome-ignore lint/suspicious/noExplicitAny: external API type
   let cachedModel: Model<any> | undefined;
 
   // EventBus for minion progress streaming
@@ -60,10 +66,10 @@ export default function (pi: ExtensionAPI): void {
 
   // Delegation conscience: Track tool calls and inject delegation reminder
   const TOOL_CALL_THRESHOLD = 8;
-  const HINT_INTERVAL = 60000 * 5;
+  const HINT_INTERVAL = 60000 * 2;
 
   let toolCallCount = 0;
-  let lastPromptText = "";
+  let _lastPromptText = "";
   let lastHintTime = 0;
 
   let usedMinionsThisSession = false;
@@ -78,7 +84,7 @@ export default function (pi: ExtensionAPI): void {
       "The agent runs as a file-based session with parent tracking.",
     promptSnippet: "Spawn a minion for isolated task delegation",
     promptGuidelines: [
-      "Use spawn for \"foreground\" task delegation. The tool blocks until the minion completes and returns its result.",
+      'Use spawn for "foreground" task delegation. The tool blocks until the minion completes and returns its result.',
       "To spawn multiple minions in parallel, emit multiple spawn calls in a single response. All results are returned together when all minions complete.",
       "For fire-and-forget delegation where you do not need the result immediately, use spawn_bg instead.",
       "Omit the agent parameter to spawn an ephemeral minion with default capabilities.",
@@ -106,7 +112,7 @@ export default function (pi: ExtensionAPI): void {
     promptSnippet: "Spawn a background minion for fire-and-forget delegation",
     promptGuidelines: [
       "Use spawn_bg for fire-and-forget tasks where you do not need the result before continuing.",
-      "Only use spawn_bg when the user explicitly asks for \"background\" execution.",
+      'Only use spawn_bg when the user explicitly asks for "background" execution.',
       "For results you need before proceeding, use spawn (foreground) instead.",
     ],
     parameters: SpawnBgToolParams,
@@ -129,8 +135,7 @@ export default function (pi: ExtensionAPI): void {
   pi.registerTool({
     name: "halt",
     label: "Halt Minion",
-    description:
-      "Abort a running minion by ID. Use id='all' to halt all running minions.",
+    description: "Abort a running minion by ID. Use id='all' to halt all running minions.",
     parameters: HaltToolParams,
     execute: (...args) => {
       if (!subsessionManager) throw new Error("SubsessionManager not initialized");
@@ -164,7 +169,8 @@ export default function (pi: ExtensionAPI): void {
   pi.registerTool({
     name: "steer_minion",
     label: "Steer Minion",
-    description: "Send a steering message to a running minion. The message is injected into the minion's context before its next LLM call.",
+    description:
+      "Send a steering message to a running minion. The message is injected into the minion's context before its next LLM call.",
     promptSnippet: "Redirect a running minion with new instructions",
     parameters: SteerMinionParams,
     execute: (...args) => {
@@ -194,7 +200,6 @@ export default function (pi: ExtensionAPI): void {
     },
   });
 
-
   tree.onChange(() => statusTracker?.refresh());
   pi.on("tool_execution_end", (event) => {
     logger.debug("status", "tool_execution_end", { tool: event.toolName });
@@ -209,22 +214,24 @@ export default function (pi: ExtensionAPI): void {
     toolCallCount++;
   });
 
-  pi.on("context", async (event, ctx) => {
+  pi.on("context", async (event, _ctx) => {
     const prompt = buildPromptFromContext(event.messages);
-    const isComplexTask = toolCallCount >= TOOL_CALL_THRESHOLD ||
+    const isComplexTask =
+      toolCallCount >= TOOL_CALL_THRESHOLD ||
       prompt.length > 200 ||
       /\b(investigate|audit|review|refactor|analyze|implement)\b/i.test(prompt);
 
-    lastPromptText = prompt;
+    _lastPromptText = prompt;
 
     // only send hint if we haven't used minions yet in this session, it's a complex task
     // and we haven't sent a hint recently (avoid spamming hints on every turn for complex tasks)
     const currentTime = Date.now();
-    const shouldSendHint = !usedMinionsThisSession && isComplexTask && (currentTime - lastHintTime > HINT_INTERVAL);
+    const shouldSendHint =
+      !usedMinionsThisSession && isComplexTask && currentTime - lastHintTime > HINT_INTERVAL;
+    const newMessages = [...event.messages];
 
     // Only inject hint for complex tasks and when prompt changes (avoid spam)
     if (shouldSendHint) {
-      const newMessages = [...event.messages];
       newMessages.push({
         role: "user",
         content: createDelegationHint(toolCallCount),
@@ -240,11 +247,11 @@ export default function (pi: ExtensionAPI): void {
         message: newMessages[newMessages.length - 1],
       });
 
-
       toolCallCount = 0;
       lastHintTime = currentTime;
-      return { messages: newMessages };
     }
+
+    return { messages: newMessages };
   });
 
   pi.on("session_start", (_event, ctx) => {
@@ -270,12 +277,13 @@ export default function (pi: ExtensionAPI): void {
     cachedUi.setStatus("minions-bg", undefined);
     cachedUi.setStatus("minions-fg", undefined);
 
-    cachedUi.setFooter(buildFooterFactory({
-      getCtx: () => cachedCtx,
-      getModel: () => cachedModel,
-      getThinkingLevel: () => pi.getThinkingLevel(),
-      tree,
-    }));
+    cachedUi.setFooter(
+      buildFooterFactory({
+        getCtx: () => cachedCtx,
+        getModel: () => cachedModel,
+        getThinkingLevel: () => pi.getThinkingLevel(),
+        tree,
+      }),
+    );
   });
 }
-

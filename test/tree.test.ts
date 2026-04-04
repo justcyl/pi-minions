@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentTree } from "../src/tree.js";
 
 let tree: AgentTree;
@@ -22,7 +22,7 @@ describe("add / get", () => {
     tree.add("parent", "kevin", "parent task");
     const child = tree.add("child", "dave", "child task", "parent");
     expect(child.parentId).toBe("parent");
-    expect(tree.get("parent")!.children).toContain("child");
+    expect(tree.get("parent")?.children).toContain("child");
   });
 
   it("get returns undefined for unknown id", () => {
@@ -89,15 +89,15 @@ describe("updateStatus", () => {
   it("transitions status", () => {
     tree.add("a", "bob", "t");
     tree.updateStatus("a", "completed", 0);
-    expect(tree.get("a")!.status).toBe("completed");
-    expect(tree.get("a")!.exitCode).toBe(0);
-    expect(tree.get("a")!.endTime).toBeDefined();
+    expect(tree.get("a")?.status).toBe("completed");
+    expect(tree.get("a")?.exitCode).toBe(0);
+    expect(tree.get("a")?.endTime).toBeDefined();
   });
 
   it("sets error message", () => {
     tree.add("a", "bob", "t");
     tree.updateStatus("a", "failed", 1, "something went wrong");
-    expect(tree.get("a")!.error).toBe("something went wrong");
+    expect(tree.get("a")?.error).toBe("something went wrong");
   });
 });
 
@@ -169,7 +169,7 @@ describe("remove", () => {
     tree.add("root", "bob", "t");
     tree.add("child", "dave", "t", "root");
     tree.remove("child");
-    expect(tree.get("root")!.children).not.toContain("child");
+    expect(tree.get("root")?.children).not.toContain("child");
   });
 
   it("is a no-op for unknown id", () => {
@@ -184,7 +184,7 @@ describe("updateActivity", () => {
     const tree = new AgentTree();
     tree.add("a", "kevin", "do stuff");
     tree.updateActivity("a", "→ $ ls -la");
-    expect(tree.get("a")!.lastActivity).toBe("→ $ ls -la");
+    expect(tree.get("a")?.lastActivity).toBe("→ $ ls -la");
   });
 
   it("is no-op for unknown id", () => {
