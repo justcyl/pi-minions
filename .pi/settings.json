@@ -2,7 +2,8 @@
   "packages": [
     {
       "source": "https://github.com/kalindudc/pi-minions",
-      "extensions": ["src/index.ts"]
+      "extensions": []
     }
-  ]
+  ],
+  "extensions": ["../src/index.ts"]
 }

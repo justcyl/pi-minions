@@ -1,4 +1,4 @@
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMinionsHandler, parseMinionArgs } from "../../src/commands/minions.js";
 import { ResultQueue } from "../../src/queue.js";
@@ -13,6 +13,24 @@ vi.mock("../../src/subsessions/observability.js", () => ({
 }));
 
 import { showMinionObservability } from "../../src/subsessions/observability.js";
+
+// Mock the agents module
+vi.mock("../../src/agents.js", () => ({
+  discoverAgents: vi.fn().mockReturnValue({ agents: [], projectAgentsDir: null }),
+}));
+
+import { discoverAgents } from "../../src/agents.js";
+
+// Mock the version module
+vi.mock("../../src/version.js", () => ({
+  VERSION: "0.0.0-test",
+  CHANGELOG_PATH: "/mock/CHANGELOG.md",
+}));
+
+// Mock fs module
+vi.mock("node:fs", () => ({
+  readFileSync: vi.fn().mockReturnValue("# Mock Changelog"),
+}));
 
 function createMockEventBus(): EventBus {
   return new EventBus();
@@ -75,9 +93,15 @@ function createMockContext(overrides?: Partial<ExtensionCommandContext>): Extens
   } as unknown as ExtensionCommandContext;
 }
 
+function createMockPi(): ExtensionAPI {
+  return {
+    sendMessage: vi.fn(),
+  } as unknown as ExtensionAPI;
+}
+
 describe("parseMinionArgs", () => {
-  it("empty args defaults to list", () => {
-    expect(parseMinionArgs("")).toEqual({ action: "list" });
+  it("empty args defaults to show-running", () => {
+    expect(parseMinionArgs("")).toEqual({ action: "show-running" });
   });
 
   it("'list' returns list action", () => {
@@ -120,6 +144,22 @@ describe("parseMinionArgs", () => {
     expect(parseMinionArgs("steer bob")).toHaveProperty("error");
   });
 
+  it("'version' returns version action", () => {
+    expect(parseMinionArgs("version")).toEqual({ action: "version" });
+  });
+
+  it("'changelog' returns changelog action", () => {
+    expect(parseMinionArgs("changelog")).toEqual({ action: "changelog" });
+  });
+
+  it("'help' returns help action", () => {
+    expect(parseMinionArgs("help")).toEqual({ action: "help" });
+  });
+
+  it("'h' returns help action (shorthand)", () => {
+    expect(parseMinionArgs("h")).toEqual({ action: "help" });
+  });
+
   it("unknown subcommand returns error", () => {
     const result = parseMinionArgs("frobnicate abc");
     expect(result).toHaveProperty("error");
@@ -127,7 +167,7 @@ describe("parseMinionArgs", () => {
   });
 
   it("handles whitespace", () => {
-    expect(parseMinionArgs("   ")).toEqual({ action: "list" });
+    expect(parseMinionArgs("   ")).toEqual({ action: "show-running" });
     expect(parseMinionArgs("  bg   abc  ")).toEqual({
       action: "bg",
       target: "abc",
@@ -135,7 +175,46 @@ describe("parseMinionArgs", () => {
   });
 });
 
-describe("list action with no minions", () => {
+describe("list action shows available agents", () => {
+  it("shows available agent types with discoverAgents", async () => {
+    vi.mocked(discoverAgents).mockReturnValueOnce({
+      agents: [
+        {
+          name: "test-agent",
+          description: "A test agent",
+          source: "project",
+          model: "gpt-4",
+          systemPrompt: "test",
+          filePath: "/test.md",
+        },
+      ],
+      projectAgentsDir: null,
+    });
+
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    const subsessionManager = createMockSubsessionManager();
+    const ctx = createMockContext();
+    const eventBus = createMockEventBus();
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
+    await handler("list", ctx);
+
+    expect(discoverAgents).toHaveBeenCalledWith(ctx.cwd, "both");
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Available minion types:"),
+      "info",
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("minion (built-in)"),
+      "info",
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("test-agent"), "info");
+    expect(showMinionObservability).not.toHaveBeenCalled();
+  });
+});
+
+describe("default action shows running minions", () => {
   it("shows info message when no minions are running", async () => {
     const tree = new AgentTree();
     const queue = new ResultQueue();
@@ -143,14 +222,38 @@ describe("list action with no minions", () => {
     const ctx = createMockContext();
     const eventBus = createMockEventBus();
 
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
-    await handler("list", ctx);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
+    await handler("", ctx);
 
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       "No active minions. Spawn one with /spawn or the spawn tool.",
       "info",
     );
     expect(showMinionObservability).not.toHaveBeenCalled();
+  });
+
+  it("opens observability for first minion alphabetically when minions exist", async () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    const subsessionManager = createMockSubsessionManager();
+    const ctx = createMockContext();
+    const eventBus = createMockEventBus();
+
+    tree.add("id-zebra", "zebra", "test");
+    tree.add("id-alpha", "alpha", "test");
+
+    vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
+    await handler("", ctx);
+
+    expect(showMinionObservability).toHaveBeenCalledWith(
+      ctx,
+      tree,
+      eventBus,
+      "id-alpha",
+      expect.any(Function),
+    );
   });
 });
 
@@ -176,8 +279,8 @@ describe("list action opens observability", () => {
 
     vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
 
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
-    await handler("list", ctx);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
+    await handler("show alpha", ctx);
 
     expect(showMinionObservability).toHaveBeenCalledWith(
       ctx,
@@ -193,8 +296,8 @@ describe("list action opens observability", () => {
 
     vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
 
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
-    await handler("list", ctx);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
+    await handler("show test", ctx);
 
     expect(showMinionObservability).toHaveBeenCalledTimes(1);
   });
@@ -204,8 +307,8 @@ describe("list action opens observability", () => {
 
     vi.mocked(showMinionObservability).mockResolvedValue({ action: "back" });
 
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
-    await handler("list", ctx);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
+    await handler("show test", ctx);
 
     expect(showMinionObservability).toHaveBeenCalledTimes(1);
   });
@@ -215,8 +318,8 @@ describe("list action opens observability", () => {
 
     vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
 
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
-    await handler("list", ctx);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
+    await handler("show test", ctx);
 
     expect(ctx.switchSession).not.toHaveBeenCalled();
   });
@@ -244,7 +347,7 @@ describe("show action opens specific minion", () => {
 
     vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
 
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
     await handler("show beta", ctx);
 
     expect(showMinionObservability).toHaveBeenCalledWith(
@@ -261,7 +364,7 @@ describe("show action opens specific minion", () => {
 
     vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
 
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
     await handler("show id-alpha", ctx);
 
     expect(showMinionObservability).toHaveBeenCalledWith(
@@ -274,7 +377,7 @@ describe("show action opens specific minion", () => {
   });
 
   it("shows error when minion not found", async () => {
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
     await handler("show nonexistent", ctx);
 
     expect(ctx.ui.notify).toHaveBeenCalledWith("Minion not found: nonexistent", "error");
@@ -286,7 +389,7 @@ describe("show action opens specific minion", () => {
 
     vi.mocked(showMinionObservability).mockResolvedValue({ action: "close" });
 
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
     await handler("s test", ctx);
 
     expect(showMinionObservability).toHaveBeenCalledWith(
@@ -295,6 +398,116 @@ describe("show action opens specific minion", () => {
       eventBus,
       "id-test",
       expect.any(Function),
+    );
+  });
+});
+
+describe("version action shows version notification", () => {
+  it("notifies with version info", async () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    const subsessionManager = createMockSubsessionManager();
+    const ctx = createMockContext();
+    const eventBus = createMockEventBus();
+    const mockPi = createMockPi();
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, mockPi);
+    await handler("version", ctx);
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringMatching(/pi-minions v0\.0\.0-test/),
+      "info",
+    );
+    expect(mockPi.sendMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("changelog action renders changelog", () => {
+  it("calls pi.sendMessage with changelog content", async () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    const subsessionManager = createMockSubsessionManager();
+    const ctx = createMockContext();
+    const eventBus = createMockEventBus();
+    const mockPi = createMockPi();
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, mockPi);
+    await handler("changelog", ctx);
+
+    expect(mockPi.sendMessage).toHaveBeenCalledWith({
+      customType: "minion-changelog",
+      content: "",
+      display: true,
+      details: { content: "# Mock Changelog" },
+    });
+    expect(ctx.ui.notify).not.toHaveBeenCalled();
+  });
+
+  it("shows error when changelog file cannot be read", async () => {
+    const { readFileSync } = await import("node:fs");
+    vi.mocked(readFileSync).mockImplementationOnce(() => {
+      throw new Error("ENOENT: file not found");
+    });
+
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    const subsessionManager = createMockSubsessionManager();
+    const ctx = createMockContext();
+    const eventBus = createMockEventBus();
+    const mockPi = createMockPi();
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, mockPi);
+    await handler("changelog", ctx);
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to read changelog"),
+      "error",
+    );
+    expect(mockPi.sendMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("help action shows available subcommands", () => {
+  it("notifies with alphabetically sorted subcommands and descriptions", async () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    const subsessionManager = createMockSubsessionManager();
+    const ctx = createMockContext();
+    const eventBus = createMockEventBus();
+    const mockPi = createMockPi();
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, mockPi);
+    await handler("help", ctx);
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Available /minions subcommands:"),
+      "info",
+    );
+    // Verify alphabetical order: bg, changelog, h, help, list, show, steer, version
+    const notifyCall = vi.mocked(ctx.ui.notify).mock.calls[0]?.[0] as string;
+    expect(notifyCall).toContain("bg");
+    expect(notifyCall).toContain("changelog");
+    expect(notifyCall).toContain("list");
+    expect(notifyCall).toContain("show");
+    expect(notifyCall).toContain("steer");
+    expect(notifyCall).toContain("version");
+    expect(mockPi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("supports 'h' shorthand", async () => {
+    const tree = new AgentTree();
+    const queue = new ResultQueue();
+    const subsessionManager = createMockSubsessionManager();
+    const ctx = createMockContext();
+    const eventBus = createMockEventBus();
+    const mockPi = createMockPi();
+
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, mockPi);
+    await handler("h", ctx);
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Available /minions subcommands:"),
+      "info",
     );
   });
 });
@@ -312,7 +525,7 @@ describe("steer action injects message into running minion", () => {
     sessions.set("a", mockSessionObj);
 
     const eventBus = createMockEventBus();
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
     await handler("steer kevin restart", ctx);
 
     expect(mockSessionObj.steer).toHaveBeenCalledWith(expect.stringContaining("[USER STEER]"));
@@ -327,7 +540,7 @@ describe("steer action injects message into running minion", () => {
     const ctx = createMockContext();
 
     const eventBus = createMockEventBus();
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
     await handler("steer nope restart", ctx);
 
     expect(ctx.ui.notify).toHaveBeenCalledWith(expect.any(String), "error");
@@ -343,7 +556,7 @@ describe("steer action injects message into running minion", () => {
     tree.updateStatus("a", "completed", 0);
 
     const eventBus = createMockEventBus();
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
     await handler("steer kevin restart", ctx);
 
     expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("not running"), "info");
@@ -358,7 +571,7 @@ describe("steer action injects message into running minion", () => {
     tree.add("a", "kevin", "task A");
 
     const eventBus = createMockEventBus();
-    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus);
+    const handler = createMinionsHandler(tree, queue, subsessionManager, eventBus, createMockPi());
     await handler("steer kevin restart", ctx);
 
     expect(ctx.ui.notify).toHaveBeenCalledWith(expect.any(String), "error");

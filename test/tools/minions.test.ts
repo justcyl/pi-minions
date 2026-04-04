@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { ResultQueue } from "../../src/queue.js";
 import type { SubsessionManager } from "../../src/subsessions/manager.js";
 import {
-  buildListMinionsText,
   buildShowMinionText,
   executeSteering,
   listMinions,
@@ -12,6 +11,13 @@ import {
 } from "../../src/tools/minions.js";
 import { AgentTree } from "../../src/tree.js";
 import { emptyUsage } from "../../src/types.js";
+
+// Mock the agents module
+vi.mock("../../src/agents.js", () => ({
+  discoverAgents: vi.fn().mockReturnValue({ agents: [], projectAgentsDir: null }),
+}));
+
+import { discoverAgents } from "../../src/agents.js";
 
 function createMockSubsessionManager(sessions: Map<string, any> = new Map()) {
   return {
@@ -51,64 +57,49 @@ function createCtx() {
 }
 
 describe("listMinions", () => {
-  it("returns message when no minions", async () => {
-    const tree = new AgentTree();
-    const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-    const subsessionManager = createMockSubsessionManager(sessions);
-    const execute = listMinions(tree, queue, subsessionManager);
+  it("returns available agents message", async () => {
+    vi.mocked(discoverAgents).mockReturnValueOnce({ agents: [], projectAgentsDir: null });
 
-    const result = await execute("tc-1", {}, undefined, undefined, createCtx());
-    const text = (result.content[0] as any).text;
-    expect(text).toContain("No running or pending");
-  });
-
-  it("lists running minions with fg/bg labels", async () => {
-    const tree = new AgentTree();
-    const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-
-    tree.add("a", "kevin", "task A");
-    tree.add("b", "bob", "task B");
-    // bob is detached = background
-    tree.markDetached("b");
-    // kevin is not detached = foreground
-
-    const subsessionManager = createMockSubsessionManager(sessions);
-    const execute = listMinions(tree, queue, subsessionManager);
+    const execute = listMinions();
     const result = await execute("tc-1", {}, undefined, undefined, createCtx());
     const text = (result.content[0] as any).text;
 
-    expect(text).toContain("kevin");
-    expect(text).toContain("foreground");
-    expect(text).toContain("bob");
-    expect(text).toContain("background");
+    expect(discoverAgents).toHaveBeenCalledWith("/tmp", "both");
+    expect(text).toContain("Available agents:");
+    expect(text).toContain("minion (built-in)");
   });
 
-  it("lists pending queue results", async () => {
-    const tree = new AgentTree();
-    const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-    const subsessionManager = createMockSubsessionManager(sessions);
-
-    queue.add({
-      id: "x",
-      name: "mel",
-      task: "do stuff",
-      output: "done",
-      usage: emptyUsage(),
-      status: "pending",
-      completedAt: Date.now(),
-      duration: 1000,
-      exitCode: 0,
+  it("includes discovered agents in output", async () => {
+    vi.mocked(discoverAgents).mockReturnValueOnce({
+      agents: [
+        {
+          name: "test-agent",
+          description: "A test agent",
+          source: "project",
+          systemPrompt: "test",
+          filePath: "/test.md",
+        },
+        {
+          name: "another-agent",
+          description: "Another agent",
+          source: "user",
+          model: "gpt-4",
+          systemPrompt: "test2",
+          filePath: "/test2.md",
+        },
+      ],
+      projectAgentsDir: null,
     });
 
-    const execute = listMinions(tree, queue, subsessionManager);
+    const execute = listMinions();
     const result = await execute("tc-1", {}, undefined, undefined, createCtx());
     const text = (result.content[0] as any).text;
 
-    expect(text).toContain("mel");
-    expect(text).toContain("Pending");
+    expect(text).toContain("Available agents:");
+    expect(text).toContain("minion (built-in)");
+    expect(text).toContain("test-agent");
+    expect(text).toContain("another-agent");
+    expect(text).toContain("[model: gpt-4]");
   });
 });
 
@@ -236,69 +227,6 @@ describe("steerMinion", () => {
     expect(mockSessionObj.steer).toHaveBeenCalledWith(expect.stringContaining("restart the count"));
     expect(text).toContain("Steered kevin");
     expect(text).toContain("restart the count");
-  });
-});
-
-describe("buildListMinionsText", () => {
-  it("returns no minions message when empty", () => {
-    const tree = new AgentTree();
-    const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-    const subsessionManager = createMockSubsessionManager(sessions);
-
-    const text = buildListMinionsText(tree, queue, subsessionManager);
-    expect(text).toContain("No running or pending minions.");
-  });
-
-  it("labels running minions as foreground when not detached", () => {
-    const tree = new AgentTree();
-    const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-
-    tree.add("a", "kevin", "task A");
-    // Not marked as detached = foreground
-
-    const subsessionManager = createMockSubsessionManager(sessions);
-    const text = buildListMinionsText(tree, queue, subsessionManager);
-    expect(text).toContain("kevin");
-    expect(text).toContain("foreground");
-  });
-
-  it("labels running minions as background when detached", () => {
-    const tree = new AgentTree();
-    const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-
-    tree.add("b", "bob", "task B");
-    tree.markDetached("b"); // Mark as detached = background
-
-    const subsessionManager = createMockSubsessionManager(sessions);
-    const text = buildListMinionsText(tree, queue, subsessionManager);
-    expect(text).toContain("bob");
-    expect(text).toContain("background");
-  });
-
-  it("includes pending queue results in output", () => {
-    const tree = new AgentTree();
-    const queue = new ResultQueue();
-    const sessions = new Map<string, any>();
-    const subsessionManager = createMockSubsessionManager(sessions);
-
-    queue.add({
-      id: "x",
-      name: "mel",
-      task: "do stuff",
-      output: "done",
-      usage: emptyUsage(),
-      status: "pending",
-      completedAt: Date.now(),
-      duration: 1000,
-      exitCode: 0,
-    });
-
-    const text = buildListMinionsText(tree, queue, subsessionManager);
-    expect(text).toContain("mel");
-    expect(text).toContain("Pending");
   });
 });
 

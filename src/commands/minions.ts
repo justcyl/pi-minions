@@ -1,4 +1,33 @@
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import { readFileSync } from "node:fs";
+
+// Helper function to reverse changelog sections so newest appears first
+function reverseChangelog(content: string): string {
+  const lines = content.split("\n");
+  const sections: string[][] = [];
+  let currentSection: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("## [")) {
+      if (currentSection.length > 0) {
+        sections.push(currentSection);
+      }
+      currentSection = [line];
+    } else {
+      currentSection.push(line);
+    }
+  }
+
+  if (currentSection.length > 0) {
+    sections.push(currentSection);
+  }
+
+  // Reverse sections and flatten
+  const reversed = sections.reverse().flat();
+  return reversed.join("\n");
+}
+
+import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import { discoverAgents } from "../agents.js";
 import { logger } from "../logger.js";
 import type { ResultQueue } from "../queue.js";
 import type { EventBus } from "../subsessions/event-bus.js";
@@ -7,9 +36,14 @@ import { showMinionObservability } from "../subsessions/observability.js";
 import { executeSteering, validateSteerTarget } from "../tools/minions.js";
 import { detachMinion } from "../tools/spawn.js";
 import type { AgentTree } from "../tree.js";
+import { CHANGELOG_PATH, VERSION } from "../version.js";
 
 type ParsedArgs =
   | { action: "list" }
+  | { action: "version" }
+  | { action: "changelog" }
+  | { action: "help" }
+  | { action: "show-running" }
   | { action: "show"; target: string }
   | { action: "bg"; target: string }
   | { action: "steer"; target: string; message: string }
@@ -18,7 +52,7 @@ type ParsedArgs =
 export function parseMinionArgs(args: string): ParsedArgs {
   const tokens = args.trim().split(/\s+/).filter(Boolean);
 
-  if (tokens.length === 0) return { action: "list" };
+  if (tokens.length === 0) return { action: "show-running" };
 
   const action = tokens[0];
 
@@ -49,8 +83,12 @@ export function parseMinionArgs(args: string): ParsedArgs {
     return { action: "steer", target, message };
   }
 
+  if (action === "version") return { action: "version" };
+  if (action === "changelog") return { action: "changelog" };
+  if (action === "help" || action === "h") return { action: "help" };
+
   return {
-    error: `Unknown subcommand: ${action}. Use list, show, bg, or steer.`,
+    error: `Unknown subcommand: ${action}. Use list, show, bg, steer, version, changelog, or help.`,
   };
 }
 
@@ -114,22 +152,52 @@ async function showMinionWithCycling(
   }
 }
 
+export function showListMinions(ctx: ExtensionCommandContext) {
+  const { agents } = discoverAgents(ctx.cwd, "both");
+  const lines = ["Available minion types:"];
+  lines.push("  minion (built-in): General-purpose ephemeral minion with default capabilities");
+
+  for (const a of agents) {
+    const model = a.model ? ` [model: ${a.model}]` : "";
+    lines.push(`  ${a.name} (${a.source}): ${a.description}${model}`);
+  }
+
+  ctx.ui.notify(lines.join("\n"), "info");
+  logger.debug("minions:cmd", "list-complete", { agentCount: agents.length });
+  return;
+}
+
 export function createMinionsHandler(
   tree: AgentTree,
   _queue: ResultQueue,
   subsessionManager: SubsessionManager,
   eventBus: EventBus,
+  pi: ExtensionAPI,
 ) {
   return async function handler(args: string, ctx: ExtensionCommandContext): Promise<void> {
+    logger.debug("minions:cmd", "handler-called", { args: args.trim() || "(empty)" });
+
     const parsed = parseMinionArgs(args);
+    logger.debug("minions:cmd", "parsed-args", {
+      action: "action" in parsed ? parsed.action : "error",
+    });
 
     if ("error" in parsed) {
+      logger.debug("minions:cmd", "parse-error", { error: parsed.error });
       ctx.ui.notify(parsed.error, "error");
       return;
     }
 
-    // list → open first minion view directly (alphabetically sorted)
+    // list → show available agent types (alias of list_agents)
     if (parsed.action === "list") {
+      logger.debug("minions:cmd", "list");
+
+      return showListMinions(ctx);
+    }
+
+    // show-running → open minion view with cycling (default behavior)
+    if (parsed.action === "show-running") {
+      logger.debug("minions:cmd", "show-running");
       const sortedIds = getSortedMinionIds(tree);
 
       if (sortedIds.length === 0) {
@@ -138,6 +206,54 @@ export function createMinionsHandler(
       }
 
       await showMinionWithCycling(ctx, tree, eventBus, sortedIds[0] ?? "");
+      return;
+    }
+
+    if (parsed.action === "version") {
+      logger.debug("minions:cmd", "version", { version: VERSION });
+      ctx.ui.notify(`pi-minions v${VERSION}`, "info");
+      return;
+    }
+
+    if (parsed.action === "changelog") {
+      logger.debug("minions:cmd", "changelog", { changelogPath: CHANGELOG_PATH });
+
+      try {
+        const content = readFileSync(CHANGELOG_PATH, "utf-8");
+        logger.debug("minions:cmd", "changelog-read", { contentLength: content.length });
+        const reversedContent = reverseChangelog(content);
+        logger.debug("minions:cmd", "changelog-reversed");
+
+        pi.sendMessage({
+          customType: "minion-changelog",
+          content: "",
+          display: true,
+          details: { content: reversedContent },
+        });
+
+        logger.debug("minions:cmd", "changelog-sent");
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.debug("minions:cmd", "changelog-error", { error: errorMessage });
+        ctx.ui.notify(`Failed to read changelog: ${errorMessage}`, "error");
+      }
+      return;
+    }
+
+    if (parsed.action === "help") {
+      logger.debug("minions:cmd", "help");
+
+      const lines = ["Available /minions subcommands:"];
+      lines.push("  bg <id|name>       - Send a foreground minion to background");
+      lines.push("  changelog          - Show the extension changelog");
+      lines.push("  h, help            - Show this help message");
+      lines.push("  list               - List available agent types");
+      lines.push("  s, show <id|name>  - Show detailed status of a specific minion");
+      lines.push("  steer <id> <msg>   - Send a steering message to a running minion");
+      lines.push("  version            - Show the extension version");
+
+      ctx.ui.notify(lines.join("\n"), "info");
+      logger.debug("minions:cmd", "help-complete");
       return;
     }
 

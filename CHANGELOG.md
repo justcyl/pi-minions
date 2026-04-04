@@ -1,6 +1,4 @@
-# Changelog
-
-## [Unreleased]
+# [oo] pi-minion Changelog
 
 ## [0.8.1] - 2026-04-04
 

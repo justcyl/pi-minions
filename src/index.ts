@@ -8,6 +8,7 @@ import { buildFooterFactory } from "./footer.js";
 import { LOG_FILE, logger } from "./logger.js";
 import { ResultQueue } from "./queue.js";
 import { renderCall, renderResult } from "./render.js";
+import { minionChangelogRenderer } from "./renderers/minion-changelog.js";
 import { minionSpawnRenderer } from "./renderers/minion-spawn.js";
 import { createStatusTracker } from "./status.js";
 import { EventBus } from "./subsessions/event-bus.js";
@@ -146,13 +147,10 @@ export default function (pi: ExtensionAPI): void {
   pi.registerTool({
     name: "list_minions",
     label: "List Minions",
-    description: "List all running and pending minions with their status and current activity.",
-    promptSnippet: "Check on running minions",
+    description: "List available agent types that can be spawned as minions.",
+    promptSnippet: "List available minion types",
     parameters: ListMinionsParams,
-    execute: (...args) => {
-      if (!subsessionManager) throw new Error("SubsessionManager not initialized");
-      return listMinions(tree, queue, subsessionManager)(...args);
-    },
+    execute: listMinions(),
   });
 
   pi.registerTool({
@@ -163,8 +161,11 @@ export default function (pi: ExtensionAPI): void {
     execute: showMinion(tree, queue),
   });
 
-  // Register custom message renderer for minion spawn status
+  // Register custom message renderers
+  logger.debug("extension", "registering-renderers");
   pi.registerMessageRenderer("minion-spawn", minionSpawnRenderer);
+  pi.registerMessageRenderer("minion-changelog", minionChangelogRenderer);
+  logger.debug("extension", "renderers-registered");
 
   pi.registerTool({
     name: "steer_minion",
@@ -185,10 +186,11 @@ export default function (pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("minions", {
-    description: "Manage minions: /minions [list|bg|steer] [id|name] [message]",
+    description:
+      "Manage minions: /minions [list|version|changelog|help|bg|steer] [id|name] [message]",
     handler: (args, ctx) => {
       if (!subsessionManager) throw new Error("SubsessionManager not initialized");
-      return createMinionsHandler(tree, queue, subsessionManager, eventBus)(args, ctx);
+      return createMinionsHandler(tree, queue, subsessionManager, eventBus, pi)(args, ctx);
     },
   });
 

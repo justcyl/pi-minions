@@ -16,6 +16,7 @@
 - [x] optimize logger: replace appendFileSync with async batching at src/logger.ts:14
 - [x] fix memory leak: prune delivered results from ResultQueue at src/queue.ts:4
 - [x] reduce spinner overhead: increase interval from 80ms to 200ms at src/tools/spawn.ts:196
+- [x] add `task style` command with Biome linter/formatter (enforces clean codebase with zero warnings)
 - [ ] minion recursion with depth limits (agent frontmatter config)
 - [ ] minion chaining (output of one feeds into another)
 - [ ] bug: when the parent uses the halt tool, the aborted minion still sends back a user message, this is wasteful
@@ -23,7 +24,6 @@
 - [ ] bring background minions to foreground with queue
 - [ ] bug: do not send a user message for background minion result, the LLM thinks it is from the user and evaluates as a user message which can lead to confusion
 - [ ] delegation reminder is very in consistent and there is no feedback when it is received
-- [x] add `task style` command with Biome linter/formatter (enforces clean codebase with zero warnings)
 
 ### observability
 - [x] simple widget to see background minion count
@@ -42,6 +42,7 @@
 - [x] token usage is not shows on a foreground minion banner until it has completed because it is not available or updated while the minion is running
 - [x] minion token usage to cost is not available
 - [ ] TUI dashboard to view full conversation and activity with keyboard hotkeys
+- [ ] add more commands to the minion view, s (steer), (b) move to background, (f) move to foreground
 - [ ] minion history/audit trail across sessions
 - [ ] visual minion tree/hierarchy display
 - [ ] export minion transcripts and results to files
