@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create release for (e.g., v0.9.0)"
+        required: true
+        type: string
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip floating tags
+        id: check-tag
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          if [ "$TAG" = "latest" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+            # Find previous semantic version tag (chronologically before current)
+            PREV_TAG=$(git tag --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -B1 "^$TAG$" | head -1)
+            # If result is same as current tag, there's no previous tag (first release)
+            if [ "$PREV_TAG" = "$TAG" ] || [ -z "$PREV_TAG" ]; then
+              # No previous tag - use first commit
+              PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+            fi
+            echo "from_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build Changelog
+        if: steps.check-tag.outputs.skip != 'true'
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v6
+        with:
+          mode: "COMMIT"
+          fromTag: ${{ steps.check-tag.outputs.from_tag }}
+          toTag: ${{ steps.check-tag.outputs.tag }}
+          configurationJson: |
+            {
+              "template": "## What's Changed\n\n#{{CHANGELOG}}\n\n<details>\n<summary>Other Changes</summary>\n\n#{{UNCATEGORIZED}}\n</details>\n\n**Full Changelog**: #{{RELEASE_DIFF}}",
+              "pr_template": "- #{{TITLE}}",
+              "categories": [
+                {
+                  "title": "### Breaking Changes",
+                  "labels": ["breaking", "break"]
+                },
+                {
+                  "title": "### Features",
+                  "labels": ["feature", "feat", "add", "implement", "support", "allow", "rewrite", "create", "introduce", "enable"]
+                },
+                {
+                  "title": "### Docs",
+                  "labels": ["docs", "doc", "readme"]
+                },
+                {
+                  "title": "### Maintenance",
+                  "labels": ["chore", "refactor", "cleanup", "update", "remove"]
+                },
+                {
+                  "title": "### Bug Fixes",
+                  "labels": ["fix", "bug"]
+                }
+              ],
+              "label_extractor": [
+                {
+                  "pattern": "(breaking|break)",
+                  "on_property": "title",
+                  "target": "breaking",
+                  "method": "match",
+                  "flags": "gi"
+                },
+                {
+                  "pattern": "(feat|feature|add|implement|support|allow|rewrite|create|introduce|enable)",
+                  "on_property": "title",
+                  "target": "feature",
+                  "method": "match",
+                  "flags": "gi"
+                },
+                {
+                  "pattern": "(docs?|readme)",
+                  "on_property": "title",
+                  "target": "docs",
+                  "method": "match",
+                  "flags": "gi"
+                },
+                {
+                  "pattern": "(chore|refactor|cleanup|update|remove)",
+                  "on_property": "title",
+                  "target": "chore",
+                  "method": "match",
+                  "flags": "gi"
+                },
+                {
+                  "pattern": "(fix|bug)",
+                  "on_property": "title",
+                  "target": "fix",
+                  "method": "match",
+                  "flags": "gi"
+                }
+              ]
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        if: steps.check-tag.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.check-tag.outputs.tag }}
+          body: ${{ steps.changelog.outputs.changelog }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
