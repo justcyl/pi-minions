@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-04-05
+
+- feat: add automated GitHub releases flow
+- feat: add batch spawn tool with unified execution and agent type display
+- feat: dev mode loads current extension version from repo directory
+- fix: single minion rendering now skips batch rendering
+- fix: footer now updates when the model is changed
+
 ## [0.9.0] - 2026-04-04
 
 - feat: add `/minions [help|version|changelog]` subcommands
