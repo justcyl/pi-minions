@@ -17,10 +17,10 @@
 - [x] reduce spinner overhead: increase interval from 80ms to 200ms at src/tools/spawn.ts:196
 - [x] add `task style` command with Biome linter/formatter (enforces clean codebase with zero warnings)
 - [x] delegation reminder is very in consistent and there is no feedback when it is received
+- [x] add `/minions version` command to quickly see the running extension version
 - [ ] minion recursion with depth limits (agent frontmatter config)
 - [ ] minion chaining (output of one feeds into another)
 - [ ] bug: when the parent uses the halt tool, the aborted minion still sends back a user message, this is wasteful
-- [ ] add `/minions version` command to quickly see the running extension version
 - [ ] bring background minions to foreground with queue
 - [ ] bug: do not send a user message for background minion result, the LLM thinks it is from the user and evaluates as a user message which can lead to confusion
 - [ ] fix critical unbounded Map growth: add TTL/capacity limit to ResultQueue results at src/queue.ts:10
@@ -42,20 +42,20 @@
 - [x] token usage is not shows on a foreground minion banner until it has completed because it is not available or updated while the minion is running
 - [x] minion token usage to cost is not available
 - [x] [critical bug]: scrollback/viewport lock with parallel foreground minions that renders beyond the viewport — TUI full re-render storm
-- [ ] TUI dashboard to view full conversation and activity with keyboard hotkeys
+- [x] add custom agent names next to the minion names if relevant, with support for a color/colour field in frontmatter
+- [x] TUI dashboard to view full conversation and activity with keyboard hotkeys
 - [ ] add more commands to the minion view, s (steer), (b) move to background, (f) move to foreground
 - [ ] minion history/audit trail across sessions
 - [ ] visual minion tree/hierarchy display
 - [ ] export minion transcripts and results to files
 - [ ] performance metrics and analytics dashboard
 - [ ] persistent steer history widget in TUI (notify toasts are transient, multiple steers lose history)
-- [ ] add custom agent names next to the minion names if relevant, with support for a color/colour field in frontmatter
 
 ### config and support
 - [x] step/turn count limits per minion
 - [x] timeout configuration per minion or globally
 - [x] batch spawn operations (spawn multiple related tasks)
-- [ ] configurable defaults for the extension (via pi config)
+- [x] configurable defaults for the extension (via pi config)
 - [ ] cost budgeting per minion with warnings/auto-halt
 - [ ] resource limits (token limits, time limits, turn limits)
 - [ ] priority queue for background minions
