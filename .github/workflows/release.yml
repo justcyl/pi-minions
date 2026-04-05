@@ -66,16 +66,16 @@ jobs:
                   "labels": ["feature", "feat", "add", "implement", "support", "allow", "rewrite", "create", "introduce", "enable"]
                 },
                 {
+                  "title": "### Bug Fixes",
+                  "labels": ["fix", "bug"]
+                },
+                {
                   "title": "### Docs",
                   "labels": ["docs", "doc", "readme"]
                 },
                 {
                   "title": "### Maintenance",
                   "labels": ["chore", "refactor", "cleanup", "update", "remove"]
-                },
-                {
-                  "title": "### Bug Fixes",
-                  "labels": ["fix", "bug"]
                 }
               ],
               "label_extractor": [
@@ -101,16 +101,16 @@ jobs:
                   "flags": "gi"
                 },
                 {
-                  "pattern": "(chore|refactor|cleanup|update|remove)",
+                  "pattern": "(fix|bug)",
                   "on_property": "title",
-                  "target": "chore",
+                  "target": "fix",
                   "method": "match",
                   "flags": "gi"
                 },
                 {
-                  "pattern": "(fix|bug)",
+                  "pattern": "(chore|refactor|cleanup|update|remove)",
                   "on_property": "title",
-                  "target": "fix",
+                  "target": "chore",
                   "method": "match",
                   "flags": "gi"
                 }
