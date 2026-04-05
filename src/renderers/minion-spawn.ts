@@ -11,6 +11,28 @@ export interface SpawnRenderResult {
   footer?: string;
 }
 
+// Helper to calculate visible width of a string (strips ANSI codes)
+function visibleWidth(str: string): number {
+  // Strip ANSI escape sequences and count remaining characters
+  return str.replace(/\x1b\[[0-9;]*m/g, "").length;
+}
+
+// Truncate text to fit within max width, adding "..." if truncated
+function truncateWithEllipsis(text: string, maxWidth: number): string {
+  if (visibleWidth(text) <= maxWidth) {
+    return text;
+  }
+  if (maxWidth <= 3) {
+    return "...".slice(0, maxWidth);
+  }
+  // Simple truncation - remove chars from the end until we fit
+  let result = text;
+  while (visibleWidth(result) > maxWidth - 3 && result.length > 0) {
+    result = result.slice(0, -1);
+  }
+  return `${result}...`;
+}
+
 // const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER = ["[oo]", "[oo]", "[oo]", "[oo]", "[o-]", "[--]", "[--]", "[-o]", "[oo]", "[oo]"];
 
@@ -71,19 +93,21 @@ export function renderBatchMinions(
     if (isDetached) {
       line += ` ${theme.fg("dim", "sent to background")}`;
     } else if (isRunning && m.activity) {
-      line += ` ${theme.fg("dim", m.activity.slice(0, 40))}`;
+      // Calculate available width for activity text
+      const terminalWidth = process.stdout.columns || 80;
+      const prefixWidth = visibleWidth(line);
+      // leave some padding on the right for aesthetics
+      const availableWidth = Math.max(10, terminalWidth - prefixWidth - 10);
+
+      const activityText = truncateWithEllipsis(m.activity, availableWidth);
+      line += ` ${theme.fg("dim", activityText)}`;
     }
 
     lines.push(line);
   }
 
-  // Build footer with usage info
-  const usageText = formatUsage(data.usage, data.model);
-  const footer = usageText ? theme.fg("muted", usageText) : undefined;
-
   return {
     body: lines.join("\n"),
-    footer,
   };
 }
 

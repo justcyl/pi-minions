@@ -187,9 +187,11 @@ export function renderResult(
     const usageText = formatUsage(usage, model);
     if (usageText) {
       // Right-align usage text (assuming 100 char terminal width)
-      const terminalWidth = 100;
-      const visibleLength = usageText.length; // Approximate visible length
+      const terminalWidth = process.stdout.columns || 80;
+      const visibleLength = usageText.length;
+      // leave some padding on the right for aesthetics
       const leftPadding = Math.max(2, terminalWidth - visibleLength - 10);
+
       parts.push(" ".repeat(leftPadding) + theme.fg("muted", usageText));
     }
   } else if (rendered.footer) {
