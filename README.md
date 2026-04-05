@@ -4,9 +4,9 @@
 [![MIT license](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 [![pi extension](https://img.shields.io/badge/pi-extension-purple)](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)
 
-Minimal subagent orchestration for [pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). No bundled agents, no opinions.
+Parallel subagent orchestration for [pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Your agents, your way.
 
-![pi-minions in action](./docs/assets/multi_minions.png)
+![agent view](./docs/assets/readme_banner.gif)
 
 ## Why pi-minions?
 
@@ -60,6 +60,8 @@ use our researcher agent to investigate testing patterns of this project
 /minions steer kevin "Focus on src/ only"
 /halt kevin                      # abort a minion
 ```
+
+![pi-minions in action](./docs/assets/minion_workflow.gif)
 
 ## Documentation
 
