@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus, MINION_PROGRESS_CHANNEL } from "../../src/subsessions/event-bus.js";
 import { hideObservability, showMinionObservability } from "../../src/subsessions/observability.js";
 import { AgentTree } from "../../src/tree.js";
+import { createMockContext } from "../helpers/mock-context.js";
 
 function createMockTheme(): Theme {
   return {
@@ -11,17 +12,6 @@ function createMockTheme(): Theme {
     bold: vi.fn((text: string) => text),
     dim: vi.fn((text: string) => text),
   } as unknown as Theme;
-}
-
-function createMockContext(): ExtensionContext {
-  return {
-    ui: {
-      setWidget: vi.fn(),
-      onTerminalInput: vi.fn().mockReturnValue(() => {}),
-      notify: vi.fn(),
-      theme: createMockTheme(),
-    },
-  } as unknown as ExtensionContext;
 }
 
 describe("showMinionObservability", () => {
@@ -33,7 +23,7 @@ describe("showMinionObservability", () => {
   beforeEach(() => {
     tree = new AgentTree();
     eventBus = new EventBus();
-    ctx = createMockContext();
+    ctx = createMockContext("/tmp");
     inputHandler = null;
 
     vi.mocked(ctx.ui.onTerminalInput).mockImplementation((handler) => {
@@ -307,7 +297,7 @@ describe("showMinionObservability", () => {
 
 describe("hideObservability", () => {
   it("removes the observability widget", () => {
-    const ctx = createMockContext();
+    const ctx = createMockContext("/tmp");
 
     hideObservability(ctx);
 
@@ -324,7 +314,7 @@ describe("event buffer management", () => {
   beforeEach(() => {
     tree = new AgentTree();
     eventBus = new EventBus();
-    ctx = createMockContext();
+    ctx = createMockContext("/tmp");
     inputHandler = null;
 
     vi.mocked(ctx.ui.onTerminalInput).mockImplementation((handler) => {

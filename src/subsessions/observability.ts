@@ -4,13 +4,13 @@
 import type { ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
 import type { TUI } from "@mariozechner/pi-tui";
 import { Key, matchesKey, Text } from "@mariozechner/pi-tui";
+import { getConfig } from "../config.js";
 import { logger } from "../logger.js";
 import type { AgentTree } from "../tree.js";
 import type { EventBus } from "./event-bus.js";
 import { MINION_PROGRESS_CHANNEL } from "./event-bus.js";
 
 const OBSERVABILITY_WIDGET_KEY = "minion-observability";
-const MAX_VISIBLE_MESSAGES = 4;
 const RENDER_THROTTLE_MS = 100;
 
 // Get minion activity history from transcript if available
@@ -69,12 +69,14 @@ class MinionObservabilityWidget {
   private renderTimeout: NodeJS.Timeout | null = null;
   private pendingRender = false;
   private tree: AgentTree;
+  private maxVisibleMessages: number;
 
   constructor(
     private minionId: string,
     private minionName: string,
     private eventBus: EventBus,
     tree: AgentTree,
+    ctx: ExtensionContext,
     onClose: () => void,
     onBack: () => void,
     onUpdate: () => void,
@@ -87,6 +89,7 @@ class MinionObservabilityWidget {
     this.onNextMinion = onNextMinion;
     this.onPrevMinion = onPrevMinion;
     this.tree = tree;
+    this.maxVisibleMessages = getConfig(ctx).display.observabilityLines;
   }
 
   start(): void {
@@ -198,7 +201,7 @@ class MinionObservabilityWidget {
     this.messages.push({ text });
 
     // Keep only last N messages for display
-    if (this.messages.length > MAX_VISIBLE_MESSAGES) {
+    if (this.messages.length > this.maxVisibleMessages) {
       this.messages.shift();
     }
 
@@ -254,9 +257,9 @@ class MinionObservabilityWidget {
     lines.push(muted("─".repeat(width)));
 
     // Show messages - oldest at top, newest at bottom
-    // Start with minimal height, grow up to MAX_VISIBLE_MESSAGES
+    // Start with minimal height, grow up to maxVisibleMessages
     const msgCount = this.messages.length;
-    const displayCount = Math.min(msgCount, MAX_VISIBLE_MESSAGES);
+    const displayCount = Math.min(msgCount, this.maxVisibleMessages);
 
     // Show messages (already in order: oldest -> newest)
     for (let i = 0; i < displayCount; i++) {
@@ -346,6 +349,7 @@ export function showMinionObservability(
       minionName,
       eventBus,
       tree,
+      ctx,
       handleClose,
       handleBack,
       handleUpdate,

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStatusTracker, MINIONS_STATUS_KEY } from "../src/status.js";
 import type { SubsessionManager } from "../src/subsessions/manager.js";
 import { AgentTree } from "../src/tree.js";
+import { createMockContext } from "./helpers/mock-context.js";
 
 // Minimal theme stub
 const theme = {
@@ -41,12 +42,12 @@ describe("createStatusTracker", () => {
 
   describe("with no UI set", () => {
     it("does not throw when refresh is called without UI", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       expect(() => tracker.refresh()).not.toThrow();
     });
 
     it("does not call setStatus without UI", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.refresh();
       expect(mockSetStatus).not.toHaveBeenCalled();
     });
@@ -54,7 +55,7 @@ describe("createStatusTracker", () => {
 
   describe("status format", () => {
     it("shows [oo] bg: count format when minions exist", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("bg1", "bg-minion", "task");
@@ -68,7 +69,7 @@ describe("createStatusTracker", () => {
     });
 
     it("includes hint after separator", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("bg1", "bg-minion", "task");
@@ -81,7 +82,7 @@ describe("createStatusTracker", () => {
     });
 
     it("clears status when no minions", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tracker.refresh();
@@ -92,7 +93,7 @@ describe("createStatusTracker", () => {
 
   describe("hint rotation", () => {
     it("includes static hints when no foreground minions", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("bg1", "bg-minion", "task");
@@ -104,7 +105,7 @@ describe("createStatusTracker", () => {
     });
 
     it("includes personalized hints for foreground minions", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("fg1", "my-agent", "task");
@@ -126,7 +127,7 @@ describe("createStatusTracker", () => {
     });
 
     it("rotates hints every 8 seconds when foreground minions exist", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("fg1", "agent1", "task");
@@ -143,7 +144,7 @@ describe("createStatusTracker", () => {
     });
 
     it("stops rotation when no foreground minions remain", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("fg1", "agent1", "task");
@@ -166,7 +167,7 @@ describe("createStatusTracker", () => {
 
   describe("background minions", () => {
     it("counts background minions correctly", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("bg1", "bg1", "task");
@@ -180,7 +181,7 @@ describe("createStatusTracker", () => {
     });
 
     it("does not count foreground minions as background", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("bg1", "bg1", "task");
@@ -194,7 +195,7 @@ describe("createStatusTracker", () => {
     });
 
     it("updates count when background minion completes", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("bg1", "bg1", "task");
@@ -214,7 +215,7 @@ describe("createStatusTracker", () => {
 
   describe("foreground minions", () => {
     it("counts foreground minions for hint generation", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("fg1", "agent1", "task");
@@ -235,7 +236,7 @@ describe("createStatusTracker", () => {
     });
 
     it("generates hints for multiple foreground minions", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("fg1", "agent1", "task");
@@ -261,7 +262,7 @@ describe("createStatusTracker", () => {
 
   describe("setUi", () => {
     it("allows updating the UI reference", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
 
       tree.add("bg1", "bg-minion", "task");
       tree.markDetached("bg1");
@@ -277,7 +278,7 @@ describe("createStatusTracker", () => {
 
   describe("destroy", () => {
     it("stops hint rotation when destroyed", () => {
-      const tracker = createStatusTracker(tree, subsessionManager);
+      const tracker = createStatusTracker(tree, subsessionManager, createMockContext("/tmp"));
       tracker.setUi(mockUi as any);
 
       tree.add("fg1", "agent1", "task");

@@ -91,7 +91,7 @@ tasks:
     cmds:
       - |
         echo "==> Running Biome linter and formatter..."
-        npx @biomejs/biome check --write --unsafe --no-errors-on-unmatched ./src ./test
+        npx @biomejs/biome check --write --unsafe --no-errors-on-unmatched --error-on-warnings ./src ./test
         biome_exit=$?
 
         echo ""

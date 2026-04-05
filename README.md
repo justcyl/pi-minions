@@ -17,6 +17,7 @@ pi-minions solves this by letting your agent spawn **minions** — isolated sub-
 - **Context hygiene** — each minion gets a fresh context. Research, analysis, and exploration don't pollute the parent session.
 - **Parallelism** — spawn multiple background or foreground minions for independent tasks. Wall-clock time equals the slowest task, not the sum.
 - **Safety** — step limits, timeouts, graceful termination, and abort controls prevent runaway agents.
+- **Configurable** — customize minion names, delegation hints, spinner animations, and display via pi settings
 
 ## Install
 
@@ -63,6 +64,30 @@ use our researcher agent to investigate testing patterns of this project
 
 ![pi-minions in action](./docs/assets/minion_workflow.gif)
 
+## Configuration
+
+```json
+// .pi/settings.json
+{
+  "pi-minions": {
+    "minionNames": ["ares", "athena", "hermes", "hephaestus"],
+    "delegation": {
+      "enabled": true,
+      "toolCallThreshold": 5,
+      "hintIntervalMinutes": 15
+    },
+    "display": {
+      "outputPreviewLines": 30,
+      "observabilityLines": 8,
+      "showStatusHints": false,
+      "spinnerFrames": ["◐", "◓", "◑", "◒"]
+    }
+  }
+}
+```
+
+For more details see [Configuration](./docs/configuration.md)
+
 ## Documentation
 
 | Doc | Description |
@@ -70,7 +95,8 @@ use our researcher agent to investigate testing patterns of this project
 | [Getting started](docs/getting-started.md) | Install → first spawn → background tasks → agents (~10 min) |
 | [Patterns](docs/patterns.md) | "How do I...?" recipes for common workflows |
 | [Agents](docs/agents.md) | Creating, configuring, and discovering named agents |
-| [Reference](docs/reference.md) | Complete tool and command schemas, types, configuration |
+| [Configuration](docs/configuration.md) | Customizing names, hints, display, and behavior |
+| [Reference](docs/reference.md) | Complete tool and command schemas, types |
 | [Architecture](docs/architecture.md) | Module map, data flow diagrams, design decisions |
 | [Contributing](docs/contributing.md) | Dev setup, project structure, testing, release process |
 | [E2E testing](docs/e2e-testing.md) | Writing and running agentic end-to-end tests |

@@ -1,4 +1,5 @@
 import type { ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
+import { getConfig } from "./config.js";
 import { logger } from "./logger.js";
 import type { SubsessionManager } from "./subsessions/manager.js";
 import type { AgentTree } from "./tree.js";
@@ -20,6 +21,7 @@ export interface StatusTracker {
 export function createStatusTracker(
   tree: AgentTree,
   _subsessionManager: SubsessionManager,
+  ctx: ExtensionContext,
 ): StatusTracker {
   let cachedUi: ExtensionContext["ui"] | null = null;
   let lastBgCount = -1;
@@ -164,7 +166,8 @@ export function createStatusTracker(
     }
 
     // Generate hints and get current one
-    const hints = generateHints(bgRunning, fgRunning);
+    const config = getConfig(ctx);
+    const hints = config.display.showStatusHints ? generateHints(bgRunning, fgRunning) : [];
     const currentHint = getNextHint(hints);
 
     // Update status

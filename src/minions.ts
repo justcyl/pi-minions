@@ -1,82 +1,29 @@
+import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { DEFAULT_MINION_NAMES, getConfig } from "./config.js";
 import type { AgentTree } from "./tree.js";
 import type { AgentConfig } from "./types.js";
-
-export const MINION_NAMES = [
-  // core
-  "kevin",
-  "stuart",
-  "bob",
-  "otto",
-  "mel",
-
-  "arnie",
-  "barry",
-  "beena",
-  "billy",
-  "bina",
-  "bobby",
-  "brett",
-  "brian",
-  "cameron",
-  "carl",
-  "claude",
-  "dan",
-  "dave",
-  "devin",
-  "donny",
-  "erik",
-  "frank",
-  "fred",
-  "gaetano",
-  "gary",
-  "george",
-  "gerald",
-  "gigi",
-  "jeff",
-  "jim",
-  "jon",
-  "jorge",
-  "juan",
-  "ken",
-  "keela",
-  "koko",
-  "lance",
-  "larry",
-  "lionel",
-  "lola",
-  "lulu",
-  "mack",
-  "mimi",
-  "momo",
-  "nana",
-  "norbert",
-  "pedro",
-  "peter",
-  "pip",
-  "pippa",
-  "ralph",
-  "robert",
-  "ron",
-  "samson",
-  "steve",
-  "ted",
-  "tim",
-  "tom",
-  "tony",
-  "zack",
-  "ziggy",
-] as const;
 
 export function generateId(): string {
   return crypto.randomUUID().replace(/-/g, "").slice(0, 8);
 }
 
-export function pickMinionName(tree: AgentTree, fallbackId: string): string {
+export function pickMinionName(
+  tree: AgentTree,
+  fallbackId: string,
+  ctx?: ExtensionContext,
+): string {
+  const names = ctx ? getConfig(ctx).minionNames : DEFAULT_MINION_NAMES;
   const inUse = new Set(tree.getRunning().map((n) => n.name));
-  const available = MINION_NAMES.filter((n) => !inUse.has(n));
-  if (available.length === 0) return `minion-${fallbackId}`;
-  const picked = available[Math.floor(Math.random() * available.length)];
-  return picked ?? `minion-${fallbackId}`;
+  const available = names.filter((n) => !inUse.has(n));
+  const useFallback = available.length === 0;
+  const availableLength = available.length === 0 ? names.length : available.length;
+
+  let name = available[Math.floor(Math.random() * availableLength)];
+  if (useFallback) {
+    name = `${name}-${fallbackId}`;
+  }
+
+  return name;
 }
 
 export const DEFAULT_MINION_PROMPT = `You are a minion — an autonomous subagent in an isolated context with no conversation history. Be concise; your output goes to a parent agent, not a human.

@@ -4,6 +4,7 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { createHaltHandler } from "./commands/halt.js";
 import { createMinionsHandler } from "./commands/minions.js";
 import { createSpawnHandler } from "./commands/spawn.js";
+import { getConfig } from "./config.js";
 import { buildFooterFactory } from "./footer.js";
 import { LOG_FILE, logger } from "./logger.js";
 import { ResultQueue } from "./queue.js";
@@ -65,9 +66,7 @@ export default function (pi: ExtensionAPI): void {
   const eventBus = new EventBus();
 
   // Delegation conscience: Track tool calls and inject delegation reminder
-  const TOOL_CALL_THRESHOLD = 8;
-  // Send the delegation hint every 8 minutes, when it qualifies
-  const HINT_INTERVAL = 60000 * 8;
+  // Config is loaded per-session in the context handler
 
   let toolCallCount = 0;
   let _lastPromptText = "";
@@ -217,10 +216,19 @@ export default function (pi: ExtensionAPI): void {
     toolCallCount++;
   });
 
-  pi.on("context", async (event, _ctx) => {
+  pi.on("context", async (event, ctx) => {
+    const config = getConfig(ctx);
+
+    // Skip delegation hints if disabled
+    if (!config.delegation.enabled) {
+      return { messages: event.messages };
+    }
+
+    const hintIntervalMs = config.delegation.hintIntervalMinutes * 60000;
+
     const prompt = buildPromptFromContext(event.messages);
     const isComplexTask =
-      toolCallCount >= TOOL_CALL_THRESHOLD ||
+      toolCallCount >= config.delegation.toolCallThreshold ||
       prompt.length > 200 ||
       /\b(investigate|audit|review|refactor|analyze|implement)\b/i.test(prompt);
 
@@ -230,7 +238,7 @@ export default function (pi: ExtensionAPI): void {
     // and we haven't sent a hint recently (avoid spamming hints on every turn for complex tasks)
     const currentTime = Date.now();
     const shouldSendHint =
-      !usedMinionsThisSession && isComplexTask && currentTime - lastHintTime > HINT_INTERVAL;
+      !usedMinionsThisSession && isComplexTask && currentTime - lastHintTime > hintIntervalMs;
     const newMessages = [...event.messages];
 
     // Only inject hint for complex tasks and when prompt changes (avoid spam)
@@ -273,7 +281,7 @@ export default function (pi: ExtensionAPI): void {
     });
 
     // Initialize status tracker now that we have subsessionManager
-    statusTracker = createStatusTracker(tree, subsessionManager);
+    statusTracker = createStatusTracker(tree, subsessionManager, ctx);
     statusTracker.setUi(cachedUi);
 
     // Clean up legacy status keys from previous versions

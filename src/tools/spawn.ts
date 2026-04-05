@@ -7,8 +7,9 @@ import type {
 import type { Static } from "@sinclair/typebox";
 import { Type } from "@sinclair/typebox";
 import { discoverAgents } from "../agents.js";
+import { getConfig } from "../config.js";
 import { logger } from "../logger.js";
-import { defaultMinionTemplate, generateId, MINION_NAMES } from "../minions.js";
+import { defaultMinionTemplate, generateId, pickMinionName } from "../minions.js";
 import type { ResultQueue } from "../queue.js";
 import { formatToolCall } from "../render.js";
 import { runMinionSession } from "../spawn.js";
@@ -96,6 +97,8 @@ export interface SpawnToolDetails {
   detached?: boolean;
   isBatch?: boolean;
   minions?: BatchMinionItem[];
+  outputPreviewLines?: number;
+  spinnerFrames?: string[];
 }
 
 // Config resolution
@@ -210,6 +213,9 @@ async function executeSpawn(
   ctx: ExtensionContext,
 ): Promise<AgentToolResult<SpawnToolDetails>> {
   const isSingleMinion = specs.length === 1;
+  const config = getConfig(ctx);
+  const spinnerFrames = config.display.spinnerFrames;
+  const outputPreviewLines = config.display.outputPreviewLines;
 
   logger.info("spawn:tool", isSingleMinion ? "start" : "batch-start", {
     count: specs.length,
@@ -227,15 +233,10 @@ async function executeSpawn(
 
   // Create minion items - track assigned names to ensure uniqueness
   const assignedNames = new Set<string>();
-  const inUse = new Set(tree.getRunning().map((n) => n.name));
 
   const minions: BatchMinionItem[] = specs.map((spec) => {
     const id = generateId();
-    const available = MINION_NAMES.filter((n) => !inUse.has(n) && !assignedNames.has(n));
-    const name =
-      available.length > 0
-        ? (available[Math.floor(Math.random() * available.length)] ?? `minion-${id}`)
-        : `minion-${id}`;
+    const name = pickMinionName(tree, id, ctx);
     assignedNames.add(name);
 
     // Resolve config and model immediately so it's available for emitUpdate
@@ -344,6 +345,8 @@ async function executeSpawn(
         usage: totalUsage,
         model: firstMinion.model,
         finalOutput,
+        outputPreviewLines,
+        spinnerFrames,
       },
     });
   };
@@ -627,6 +630,8 @@ async function executeSpawn(
       finalOutput,
       isBatch: true,
       minions: [...minions],
+      outputPreviewLines,
+      spinnerFrames,
     },
   };
 
@@ -721,15 +726,11 @@ export function spawnBg(
     ctx: ExtensionContext,
   ): Promise<AgentToolResult<SpawnToolDetails>> {
     const id = generateId();
-    const inUse = new Set(tree.getRunning().map((n) => n.name));
-    const available = MINION_NAMES.filter((n) => !inUse.has(n));
-    const name =
-      available.length > 0
-        ? (available[Math.floor(Math.random() * available.length)] ?? `minion-${id}`)
-        : `minion-${id}`;
+    const name = pickMinionName(tree, id, ctx);
 
     const config = resolveConfig(params, name, ctx.cwd);
     const resolvedModel = params.model ?? config.model ?? ctx.model?.id;
+    const piConfig = getConfig(ctx);
 
     logger.info("spawn:tool", "start-bg", {
       id,
@@ -793,6 +794,8 @@ export function spawnBg(
         usage: emptyUsage(),
         model: resolvedModel,
         finalOutput: `Spawned in background`,
+        outputPreviewLines: piConfig.display.outputPreviewLines,
+        spinnerFrames: piConfig.display.spinnerFrames,
       },
     };
 

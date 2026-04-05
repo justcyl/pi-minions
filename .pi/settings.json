@@ -5,5 +5,10 @@
       "extensions": []
     }
   ],
-  "extensions": ["../src/index.ts"]
+  "extensions": ["../src/index.ts"],
+  "pi-minions": {
+    "display": {
+      "observabilityLines": 10
+    }
+  }
 }

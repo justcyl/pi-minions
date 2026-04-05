@@ -1,6 +1,7 @@
 import type { MessageRenderOptions, Theme } from "@mariozechner/pi-coding-agent";
 import type { Component } from "@mariozechner/pi-tui";
 import { Text } from "@mariozechner/pi-tui";
+import { DEFAULT_SPINNER_FRAMES } from "../config.js";
 import { formatUsage } from "../render.js";
 import type { SpawnToolDetails } from "../tools/spawn.js";
 
@@ -14,6 +15,7 @@ export interface SpawnRenderResult {
 // Helper to calculate visible width of a string (strips ANSI codes)
 function visibleWidth(str: string): number {
   // Strip ANSI escape sequences and count remaining characters
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Intentional ANSI escape sequence matching
   return str.replace(/\x1b\[[0-9;]*m/g, "").length;
 }
 
@@ -33,8 +35,10 @@ function truncateWithEllipsis(text: string, maxWidth: number): string {
   return `${result}...`;
 }
 
-// const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const SPINNER = ["[oo]", "[oo]", "[oo]", "[oo]", "[o-]", "[--]", "[--]", "[-o]", "[oo]", "[oo]"];
+function getSpinner(spinnerFrames: string[] | undefined, frameIndex: number): string {
+  const frames = spinnerFrames ?? DEFAULT_SPINNER_FRAMES;
+  return frames[frameIndex % frames.length] ?? frames[0] ?? "○";
+}
 
 export function renderBatchMinions(
   data: SpawnToolDetails,
@@ -42,6 +46,7 @@ export function renderBatchMinions(
   theme: Theme,
 ): SpawnRenderResult {
   const minions = data.minions ?? [];
+  const spinnerFrames = data.spinnerFrames;
 
   const lines: string[] = [];
 
@@ -62,7 +67,7 @@ export function renderBatchMinions(
     } else if (isCompleted) {
       icon = "✓";
     } else {
-      icon = SPINNER[(m.spinnerFrame ?? 0) % SPINNER.length];
+      icon = getSpinner(spinnerFrames, m.spinnerFrame ?? 0);
     }
 
     let color: "accent" | "warning" | "error" | "success" | "text" | "muted" | "dim";
@@ -126,6 +131,7 @@ export function renderSingleMinion(
   let model = data.model;
   let id = data.id;
   let detached = data.detached;
+
   if (data.minions && data.minions.length > 0) {
     // If we have batch minions but only one, render it as a single minion for better detail
     name = data.minions[0].name;
@@ -157,8 +163,7 @@ export function renderSingleMinion(
     icon = "✗";
     statusColor = "error";
   } else if (isRunning) {
-    const frame = SPINNER[(spinnerFrame ?? 0) % SPINNER.length];
-    icon = frame;
+    icon = getSpinner(data.spinnerFrames, spinnerFrame ?? 0);
     statusColor = "accent";
   } else {
     icon = "✓";
@@ -194,7 +199,8 @@ export function renderSingleMinion(
 
   // Expanded output preview
   if (options.expanded && finalOutput) {
-    const preview = finalOutput.split("\n").slice(0, 20).join("\n");
+    const previewLines = data.outputPreviewLines ?? 20;
+    const preview = finalOutput.split("\n").slice(0, previewLines).join("\n");
     body += (body ? "\n" : "") + theme.fg("toolOutput", preview);
   }
 
