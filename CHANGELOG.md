@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-04-06
+
+- docs: update readme and other docs to recommend pi-minions install with npm
+
 ## [0.12.0] - 2026-04-06
 
 - feat: deliver background minion results via custom message renderer with tool-style rendering
