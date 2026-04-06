@@ -22,7 +22,7 @@ pi-minions solves this by letting your agent spawn **minions** — isolated sub-
 ## Install
 
 ```bash
-pi install npm:pi-minions@latest
+pi install npm:pi-minions
 ```
 
 ## Quick start
