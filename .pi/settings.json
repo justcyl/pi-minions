@@ -3,6 +3,10 @@
     {
       "source": "https://github.com/kalindudc/pi-minions",
       "extensions": []
+    },
+    {
+      "source": "npm:pi-minions@latest",
+      "extensions": []
     }
   ],
   "extensions": ["../src/index.ts"],
