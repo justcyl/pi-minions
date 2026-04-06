@@ -16,6 +16,9 @@
     "type": "git",
     "url": "git+https://github.com/kalindudc/pi-minions.git"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "pi": {
     "extensions": [
       "./src/index.ts"
@@ -50,6 +53,7 @@
     "style": "task style",
     "style:check": "biome check ./src ./test",
     "style:fix": "biome check --write --unsafe --no-errors-on-unmatched ./src ./test",
-    "format": "biome format --write --no-errors-on-unmatched ./src ./test"
+    "format": "biome format --write --no-errors-on-unmatched ./src ./test",
+    "prepublishOnly": "npm run typecheck && npm test"
   }
 }
