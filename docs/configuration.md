@@ -30,6 +30,10 @@ Add a `pi-minions` key to your settings file:
       "observabilityLines": 6,
       "showStatusHints": true,
       "spinnerFrames": ["[oo]", "[o-]", "[--]", "[-o]"]
+    },
+    "toolSync": {
+      "enabled": true,
+      "maxWait": 5
     }
   }
 }
@@ -101,6 +105,24 @@ Animation frames for running minions. Each frame displays for 100ms.
 |---------|------|
 | `["[oo]", "[oo]", "[oo]", "[oo]", "[o-]", "[--]", "[--]", "[-o]", "[oo]", "[oo]"]` | `string[]` |
 
+### toolSync.enabled
+
+Wait for parent extension tools to register in minion sessions before starting the LLM. Some extensions discover and register tools asynchronously after session start. When enabled, minion sessions poll until all parent tools are available, ensuring the LLM sees the full toolset on its first turn.
+
+Disable this if your extensions don't use async tool registration, or if you prefer faster minion startup over tool availability.
+
+| Default | Type |
+|---------|------|
+| true | `boolean` |
+
+### toolSync.maxWait
+
+Maximum time in seconds to wait for async extension tools to register in minion sessions. The wait polls every 200ms and exits early once all expected tools are found. If the timeout is reached, the minion starts anyway with whatever tools are available.
+
+| Default | Type | Range |
+|---------|------|-------|
+| 5 | `number` | 0-30 |
+
 ## Example configurations
 
 ### Minimal custom names
@@ -137,6 +159,30 @@ Animation frames for running minions. Each frame displays for 100ms.
 }
 ```
 
+### Disable tool sync for faster startup
+
+```json
+{
+  "pi-minions": {
+    "toolSync": {
+      "enabled": false
+    }
+  }
+}
+```
+
+### Increase tool sync timeout for slow networks
+
+```json
+{
+  "pi-minions": {
+    "toolSync": {
+      "maxWait": 10
+    }
+  }
+}
+```
+
 ### Full customization
 
 ```json
@@ -153,6 +199,10 @@ Animation frames for running minions. Each frame displays for 100ms.
       "observabilityLines": 8,
       "showStatusHints": false,
       "spinnerFrames": ["◐", "◓", "◑", "◒"]
+    },
+    "toolSync": {
+      "enabled": true,
+      "maxWait": 5
     }
   }
 }

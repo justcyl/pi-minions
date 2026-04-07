@@ -10,6 +10,8 @@ export interface PiMinionsConfig {
   delegation?: DelegationConfig;
   /** Display/rendering settings */
   display?: DisplayConfig;
+  /** Tool synchronization settings for minion sessions */
+  toolSync?: ToolSyncConfig;
 }
 
 export interface DelegationConfig {
@@ -19,6 +21,13 @@ export interface DelegationConfig {
   toolCallThreshold?: number;
   /** Minutes between delegation hints (default: 8) */
   hintIntervalMinutes?: number;
+}
+
+export interface ToolSyncConfig {
+  /** Wait for parent tools to register in minion sessions (default: true) */
+  enabled?: boolean;
+  /** Maximum time in seconds to wait for async tools to register (default: 5) */
+  maxWait?: number;
 }
 
 export interface DisplayConfig {
@@ -37,6 +46,7 @@ export interface ResolvedConfig {
   minionNames: string[];
   delegation: Required<DelegationConfig>;
   display: Required<DisplayConfig>;
+  toolSync: Required<ToolSyncConfig>;
 }
 
 // Pi settings interface matching the expected structure
@@ -83,6 +93,10 @@ function loadSettings(cwd: string): PiSettings {
           display: {
             ...settings["pi-minions"]?.display,
             ...projectSettings["pi-minions"]?.display,
+          },
+          toolSync: {
+            ...settings["pi-minions"]?.toolSync,
+            ...projectSettings["pi-minions"]?.toolSync,
           },
         };
       }
@@ -188,6 +202,10 @@ export function getConfig(ctx: ExtensionContext): ResolvedConfig {
       observabilityLines: user.display?.observabilityLines ?? 6,
       showStatusHints: user.display?.showStatusHints ?? true,
       spinnerFrames: [...(user.display?.spinnerFrames ?? DEFAULT_SPINNER_FRAMES)],
+    },
+    toolSync: {
+      enabled: user.toolSync?.enabled ?? true,
+      maxWait: user.toolSync?.maxWait ?? 5,
     },
   };
 }

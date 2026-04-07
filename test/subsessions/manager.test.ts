@@ -25,6 +25,12 @@ vi.mock("@mariozechner/pi-coding-agent", () => {
       },
       cost: 0.001,
     }),
+    getAllTools: vi.fn().mockReturnValue([
+      { name: "read", description: "Read files" },
+      { name: "bash", description: "Run bash" },
+      { name: "edit", description: "Edit files" },
+    ]),
+    bindExtensions: vi.fn().mockResolvedValue(undefined),
   };
 
   const mockSessionManager = {
@@ -342,6 +348,7 @@ describe("SubsessionManager", () => {
                 },
                 cost: 0.005,
               }),
+              bindExtensions: vi.fn().mockResolvedValue(undefined),
             },
           }) as any,
       );
@@ -401,6 +408,7 @@ describe("SubsessionManager", () => {
                 },
                 cost: 0.001,
               }),
+              bindExtensions: vi.fn().mockResolvedValue(undefined),
             },
           }) as any,
       );
@@ -451,6 +459,301 @@ describe("SubsessionManager", () => {
 
       // Then the parent session path is available
       expect(found?.parentSession).toBe(join(tempDir, "parent.jsonl"));
+    });
+  });
+
+  describe("customTools forwarding", () => {
+    it("passes customTools to createAgentSession when provided", async () => {
+      // Given customTools in the session options
+      const customTools = [
+        {
+          name: "my-tool",
+          label: "My Tool",
+          description: "A custom tool for testing",
+          parameters: {} as any,
+          execute: vi.fn(),
+        },
+      ];
+
+      // When creating a minion session with customTools
+      await manager.create({
+        id: "custom-tools-test",
+        name: "test-minion",
+        task: "do something",
+        config: {
+          name: "test",
+          description: "Test agent",
+          systemPrompt: "You are a test agent.",
+          source: "ephemeral",
+          filePath: "/tmp/test.md",
+        },
+        spawnedBy: "tool-call-1",
+        cwd: tempDir,
+        modelRegistry: {} as any,
+        customTools,
+      });
+
+      // Then createAgentSession receives the customTools
+      const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
+      expect(createAgentSession).toHaveBeenCalledWith(expect.objectContaining({ customTools }));
+    });
+
+    it("passes undefined customTools when not provided", async () => {
+      // Given no customTools in the session options
+      await manager.create({
+        id: "no-custom-tools-test",
+        name: "test-minion",
+        task: "do something",
+        config: {
+          name: "test",
+          description: "Test agent",
+          systemPrompt: "You are a test agent.",
+          source: "ephemeral",
+          filePath: "/tmp/test.md",
+        },
+        spawnedBy: "tool-call-1",
+        cwd: tempDir,
+        modelRegistry: {} as any,
+      });
+
+      // Then createAgentSession receives undefined for customTools
+      const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
+      expect(createAgentSession).toHaveBeenCalledWith(
+        expect.objectContaining({ customTools: undefined }),
+      );
+    });
+  });
+
+  describe("extension binding on session creation", () => {
+    it("calls bindExtensions on the created session to trigger session_start", async () => {
+      const bindExtensionsMock = vi.fn().mockResolvedValue(undefined);
+
+      const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
+      vi.mocked(createAgentSession).mockImplementationOnce(
+        async () =>
+          ({
+            session: {
+              subscribe: () => () => {},
+              abort: vi.fn(),
+              prompt: vi.fn().mockResolvedValue(undefined),
+              state: { messages: [] },
+              getSessionStats: vi.fn().mockReturnValue({
+                tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+                cost: 0.001,
+              }),
+              getAllTools: vi.fn().mockReturnValue([]),
+              bindExtensions: bindExtensionsMock,
+            },
+          }) as any,
+      );
+
+      await manager.create({
+        id: "bind-test",
+        name: "test-minion",
+        task: "do something",
+        config: {
+          name: "test",
+          description: "Test",
+          systemPrompt: "test",
+          source: "ephemeral",
+          filePath: "",
+        },
+        spawnedBy: "tc",
+        cwd: tempDir,
+        modelRegistry: {} as any,
+      });
+
+      // bindExtensions is an SDK boundary call that triggers session_start
+      expect(bindExtensionsMock).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("async tool synchronization", () => {
+    it("proceeds immediately when all expected parent tools are already present", async () => {
+      const getAllToolsMock = vi.fn().mockReturnValue([
+        { name: "observe_query", description: "Query" },
+        { name: "slack_search", description: "Search" },
+      ]);
+
+      const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
+      vi.mocked(createAgentSession).mockImplementationOnce(
+        async () =>
+          ({
+            session: {
+              subscribe: () => () => {},
+              abort: vi.fn(),
+              prompt: vi.fn().mockResolvedValue(undefined),
+              state: { messages: [] },
+              getSessionStats: vi.fn().mockReturnValue({
+                tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+                cost: 0.001,
+              }),
+              getAllTools: getAllToolsMock,
+              bindExtensions: vi.fn().mockResolvedValue(undefined),
+            },
+          }) as any,
+      );
+
+      const start = Date.now();
+      await manager.create({
+        id: "immediate-test",
+        name: "test-minion",
+        task: "do something",
+        config: {
+          name: "test",
+          description: "Test",
+          systemPrompt: "test",
+          source: "ephemeral",
+          filePath: "",
+        },
+        spawnedBy: "tc",
+        cwd: tempDir,
+        modelRegistry: {} as any,
+        parentToolNames: ["observe_query", "slack_search"],
+      });
+
+      // Should return nearly instantly, not wait 5 seconds
+      expect(Date.now() - start).toBeLessThan(1000);
+    });
+
+    it("proceeds immediately when parentToolNames only contains builtin tools", async () => {
+      const getAllToolsMock = vi.fn().mockReturnValue([]);
+
+      const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
+      vi.mocked(createAgentSession).mockImplementationOnce(
+        async () =>
+          ({
+            session: {
+              subscribe: () => () => {},
+              abort: vi.fn(),
+              prompt: vi.fn().mockResolvedValue(undefined),
+              state: { messages: [] },
+              getSessionStats: vi.fn().mockReturnValue({
+                tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+                cost: 0.001,
+              }),
+              getAllTools: getAllToolsMock,
+              bindExtensions: vi.fn().mockResolvedValue(undefined),
+            },
+          }) as any,
+      );
+
+      const start = Date.now();
+      await manager.create({
+        id: "builtin-only-test",
+        name: "test-minion",
+        task: "do something",
+        config: {
+          name: "test",
+          description: "Test",
+          systemPrompt: "test",
+          source: "ephemeral",
+          filePath: "",
+        },
+        spawnedBy: "tc",
+        cwd: tempDir,
+        modelRegistry: {} as any,
+        parentToolNames: ["read", "bash", "edit", "write"],
+      });
+
+      // Builtin tools are excluded from wait — should return instantly
+      expect(Date.now() - start).toBeLessThan(1000);
+      // getAllTools should not be called for polling since all expected tools are builtin
+      expect(getAllToolsMock).not.toHaveBeenCalled();
+    });
+
+    it("times out gracefully when expected tools never appear", async () => {
+      // getAllTools always returns empty — the expected tool never registers
+      const getAllToolsMock = vi.fn().mockReturnValue([]);
+
+      const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
+      vi.mocked(createAgentSession).mockImplementationOnce(
+        async () =>
+          ({
+            session: {
+              subscribe: () => () => {},
+              abort: vi.fn(),
+              prompt: vi.fn().mockResolvedValue(undefined),
+              state: { messages: [] },
+              getSessionStats: vi.fn().mockReturnValue({
+                tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+                cost: 0.001,
+              }),
+              getAllTools: getAllToolsMock,
+              bindExtensions: vi.fn().mockResolvedValue(undefined),
+            },
+          }) as any,
+      );
+
+      // Use a short maxWait to avoid slow test
+      const handle = await manager.create({
+        id: "timeout-test",
+        name: "test-minion",
+        task: "do something",
+        config: {
+          name: "test",
+          description: "Test",
+          systemPrompt: "test",
+          source: "ephemeral",
+          filePath: "",
+        },
+        spawnedBy: "tc",
+        cwd: tempDir,
+        modelRegistry: {} as any,
+        parentToolNames: ["vault_get_current_user"],
+        toolSyncMaxWait: 400,
+      });
+
+      // Should complete (not throw) even though the tool never appeared
+      expect(handle).toBeDefined();
+      expect(handle.id).toBe("timeout-test");
+    });
+
+    it("skips wait entirely when toolSyncEnabled is false", async () => {
+      // getAllTools returns empty — if wait ran, it would poll for 5s
+      const getAllToolsMock = vi.fn().mockReturnValue([]);
+
+      const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
+      vi.mocked(createAgentSession).mockImplementationOnce(
+        async () =>
+          ({
+            session: {
+              subscribe: () => () => {},
+              abort: vi.fn(),
+              prompt: vi.fn().mockResolvedValue(undefined),
+              state: { messages: [] },
+              getSessionStats: vi.fn().mockReturnValue({
+                tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+                cost: 0.001,
+              }),
+              getAllTools: getAllToolsMock,
+              bindExtensions: vi.fn().mockResolvedValue(undefined),
+            },
+          }) as any,
+      );
+
+      const start = Date.now();
+      await manager.create({
+        id: "disabled-test",
+        name: "test-minion",
+        task: "do something",
+        config: {
+          name: "test",
+          description: "Test",
+          systemPrompt: "test",
+          source: "ephemeral",
+          filePath: "",
+        },
+        spawnedBy: "tc",
+        cwd: tempDir,
+        modelRegistry: {} as any,
+        parentToolNames: ["vault_get_current_user"],
+        toolSyncEnabled: false,
+      });
+
+      // Should return instantly — getAllTools never called for polling
+      expect(Date.now() - start).toBeLessThan(1000);
+      expect(getAllToolsMock).not.toHaveBeenCalled();
     });
   });
 });

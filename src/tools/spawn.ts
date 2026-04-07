@@ -261,9 +261,9 @@ async function executeSpawn(
   ctx: ExtensionContext,
 ): Promise<AgentToolResult<SpawnToolDetails>> {
   const isSingleMinion = specs.length === 1;
-  const config = getConfig(ctx);
-  const spinnerFrames = config.display.spinnerFrames;
-  const outputPreviewLines = config.display.outputPreviewLines;
+  const piConfig = getConfig(ctx);
+  const spinnerFrames = piConfig.display.spinnerFrames;
+  const outputPreviewLines = piConfig.display.outputPreviewLines;
 
   logger.info("spawn:tool", isSingleMinion ? "start" : "batch-start", {
     count: specs.length,
@@ -278,6 +278,9 @@ async function executeSpawn(
       })),
     });
   }
+
+  // Collect parent tool names for diagnostic comparison in minion sessions
+  const parentToolNames = pi.getAllTools().map((t) => t.name);
 
   // Create minion items - track assigned names to ensure uniqueness
   const assignedNames = new Set<string>();
@@ -427,6 +430,9 @@ async function executeSpawn(
         subsessionManager,
         spawnedBy: toolCallId,
         parentSessionPath: ctx.sessionManager?.getSessionFile() ?? undefined,
+        parentToolNames,
+        toolSyncEnabled: piConfig.toolSync.enabled,
+        toolSyncMaxWait: piConfig.toolSync.maxWait * 1000,
         onToolActivity: (activity) => {
           if (activity.type === "start") {
             const desc = formatToolCall(activity.toolName, activity.args ?? {});
@@ -803,6 +809,9 @@ export function spawnBg(
       subsessionManager,
       spawnedBy: _toolCallId,
       parentSessionPath: ctx.sessionManager?.getSessionFile() ?? undefined,
+      parentToolNames: pi.getAllTools().map((t) => t.name),
+      toolSyncEnabled: piConfig.toolSync.enabled,
+      toolSyncMaxWait: piConfig.toolSync.maxWait * 1000,
       onToolActivity: (activity) => {
         if (activity.type === "start") {
           tree.updateActivity(id, `→ ${formatToolCall(activity.toolName, activity.args ?? {})}`);

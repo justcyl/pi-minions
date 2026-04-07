@@ -32,6 +32,10 @@ export interface CreateMinionSessionOptions {
   parentModel?: import("@mariozechner/pi-ai").Model<any>;
   parentSystemPrompt?: string;
   signal?: AbortSignal;
+  customTools?: import("@mariozechner/pi-coding-agent").ToolDefinition[];
+  parentToolNames?: string[];
+  toolSyncEnabled?: boolean;
+  toolSyncMaxWait?: number;
   onToolActivity?: (activity: {
     type: "start" | "end";
     toolName: string;

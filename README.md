@@ -17,7 +17,8 @@ pi-minions solves this by letting your agent spawn **minions** — isolated sub-
 - **Context hygiene** — each minion gets a fresh context. Research, analysis, and exploration don't pollute the parent session.
 - **Parallelism** — spawn multiple background or foreground minions for independent tasks. Wall-clock time equals the slowest task, not the sum.
 - **Safety** — step limits, timeouts, graceful termination, and abort controls prevent runaway agents.
-- **Configurable** — customize minion names, delegation hints, spinner animations, and display via pi settings
+- **Tool inheritance** — minions automatically inherit authenticated extension tools from the parent session.
+- **Configurable** — customize minion names, delegation hints, tool sync, spinner animations, and display via pi settings
 
 ## Install
 
@@ -81,6 +82,10 @@ use our researcher agent to investigate testing patterns of this project
       "observabilityLines": 8,
       "showStatusHints": false,
       "spinnerFrames": ["◐", "◓", "◑", "◒"]
+    },
+    "toolSync": {
+      "enabled": true,
+      "maxWait": 5
     }
   }
 }

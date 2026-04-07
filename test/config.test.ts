@@ -58,6 +58,8 @@ describe("getConfig", () => {
       expect(config.display.observabilityLines).toBe(6);
       expect(config.display.showStatusHints).toBe(true);
       expect(config.display.spinnerFrames).toEqual(DEFAULT_SPINNER_FRAMES);
+      expect(config.toolSync.enabled).toBe(true);
+      expect(config.toolSync.maxWait).toBe(5);
     });
 
     it("has 61 default minion names", () => {
@@ -127,6 +129,24 @@ describe("getConfig", () => {
       expect(config.display.observabilityLines).toBe(8);
       expect(config.display.showStatusHints).toBe(false);
       expect(config.display.spinnerFrames).toEqual(["◐", "◓", "◑", "◒"]);
+    });
+
+    it("reads toolSync settings from global settings", () => {
+      const globalSettings = {
+        "pi-minions": {
+          toolSync: {
+            enabled: false,
+            maxWait: 10,
+          },
+        },
+      };
+      writeFileSync(join(agentDir, "settings.json"), JSON.stringify(globalSettings));
+
+      const ctx = createMockContext(tempDir);
+      const config = getConfig(ctx);
+
+      expect(config.toolSync.enabled).toBe(false);
+      expect(config.toolSync.maxWait).toBe(10);
     });
   });
 
@@ -211,6 +231,33 @@ describe("getConfig", () => {
       // observabilityLines and spinnerFrames should merge from global
       expect(config.display.observabilityLines).toBe(4);
       expect(config.display.spinnerFrames).toEqual(["a", "b", "c"]);
+    });
+
+    it("project toolSync settings override global", () => {
+      const globalSettings = {
+        "pi-minions": {
+          toolSync: {
+            enabled: true,
+            maxWait: 10,
+          },
+        },
+      };
+      const projectSettings = {
+        "pi-minions": {
+          toolSync: {
+            enabled: false,
+          },
+        },
+      };
+      writeFileSync(join(agentDir, "settings.json"), JSON.stringify(globalSettings));
+      writeFileSync(join(tempDir, ".pi", "settings.json"), JSON.stringify(projectSettings));
+
+      const ctx = createMockContext(tempDir);
+      const config = getConfig(ctx);
+
+      expect(config.toolSync.enabled).toBe(false);
+      // maxWait should merge from global
+      expect(config.toolSync.maxWait).toBe(10);
     });
   });
 
@@ -342,6 +389,10 @@ describe("Config types", () => {
         observabilityLines: 6,
         showStatusHints: true,
         spinnerFrames: ["a", "b"],
+      },
+      toolSync: {
+        enabled: true,
+        maxWait: 5,
       },
     };
 

@@ -230,3 +230,33 @@ describe("live usage propagation", () => {
     expect(usageUpdates).toHaveLength(0);
   });
 });
+
+// Tool forwarding
+
+describe("tool forwarding", () => {
+  it("does not crash when parentToolNames is provided", async () => {
+    setup({ totalTurns: 2, turnDelayMs: 1 });
+    const result = await runMinionSession(makeConfig(), "do something", {
+      ...baseOpts,
+      parentToolNames: ["read", "bash"],
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("does not crash when customTools is provided", async () => {
+    setup({ totalTurns: 2, turnDelayMs: 1 });
+    const result = await runMinionSession(makeConfig(), "do something", {
+      ...baseOpts,
+      customTools: [
+        {
+          name: "my-tool",
+          label: "My Tool",
+          description: "test",
+          parameters: {} as any,
+          execute: vi.fn(),
+        },
+      ],
+    });
+    expect(result.exitCode).toBe(0);
+  });
+});

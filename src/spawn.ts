@@ -76,6 +76,10 @@ export async function runMinionSession(
     name?: string;
     signal?: AbortSignal;
     modelRegistry: ModelRegistry;
+    customTools?: import("@mariozechner/pi-coding-agent").ToolDefinition[];
+    parentToolNames?: string[];
+    toolSyncEnabled?: boolean;
+    toolSyncMaxWait?: number;
     // biome-ignore lint/suspicious/noExplicitAny: external API type
     parentModel?: Model<any>;
     cwd: string;
@@ -144,6 +148,10 @@ export async function runMinionSession(
             parentModel: opts.parentModel,
             parentSystemPrompt: opts.parentSystemPrompt,
             signal: opts.signal,
+            customTools: opts.customTools,
+            parentToolNames: opts.parentToolNames,
+            toolSyncEnabled: opts.toolSyncEnabled,
+            toolSyncMaxWait: opts.toolSyncMaxWait,
 
             // Wire callbacks to update BOTH systems
             onToolActivity: (activity) => {

@@ -48,7 +48,15 @@ function createCtx() {
 function createDeps() {
   const tree = new AgentTree();
   const queue = new ResultQueue();
-  const pi = { sendUserMessage: vi.fn(), sendMessage: vi.fn() } as any;
+  const pi = {
+    sendUserMessage: vi.fn(),
+    sendMessage: vi.fn(),
+    getAllTools: vi.fn().mockReturnValue([
+      { name: "read", description: "Read files" },
+      { name: "bash", description: "Run bash" },
+      { name: "spawn", description: "Spawn minions" },
+    ]),
+  } as any;
   const subsessionManager = new SubsessionManager("/tmp", "/tmp/parent.jsonl");
   return { tree, queue, pi, subsessionManager };
 }
@@ -1010,7 +1018,15 @@ describe("spawnBg — completion result delivery", () => {
     const queue = new ResultQueue();
     const addSpy = vi.spyOn(queue, "add");
     const acceptSpy = vi.spyOn(queue, "accept");
-    const pi = { sendUserMessage: vi.fn(), sendMessage: vi.fn() } as any;
+    const pi = {
+      sendUserMessage: vi.fn(),
+      sendMessage: vi.fn(),
+      getAllTools: vi.fn().mockReturnValue([
+        { name: "read", description: "Read files" },
+        { name: "bash", description: "Run bash" },
+        { name: "spawn", description: "Spawn minions" },
+      ]),
+    } as any;
     const subsessionManager = new SubsessionManager("/tmp", "/tmp/parent.jsonl");
 
     // Make sendMessage throw

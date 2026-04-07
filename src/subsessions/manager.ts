@@ -99,11 +99,24 @@ export class SubsessionManager {
       cwd: this.cwd,
       model: parentModel,
       tools: createCodingTools(this.cwd),
+      customTools: options.customTools,
       sessionManager,
       settingsManager: SettingsManager.create(),
       modelRegistry,
       resourceLoader: loader,
     });
+
+    // Bind extensions to trigger session_start — required for extensions that
+    // register tools asynchronously.
+    // Without this call, session_start never fires and those tools never load.
+    await session.bindExtensions({ shutdownHandler: async () => {} });
+
+    // Wait for async extension tools to stabilize before starting the session.
+    // Some extensions register tools asynchronously after session_start
+    // via fire-and-forget handlers. Configurable via toolSync settings.
+    if (options.toolSyncEnabled !== false) {
+      await this.waitForAsyncTools(id, session, options.parentToolNames, options.toolSyncMaxWait);
+    }
 
     // Store the session for steer/halt operations
     this.activeSessions.set(id, session);
@@ -270,6 +283,65 @@ export class SubsessionManager {
       },
     };
   }
+
+  private async waitForAsyncTools(
+    id: string,
+    session: AgentSession,
+    parentToolNames?: string[],
+    maxWait?: number,
+  ): Promise<void> {
+    if (!parentToolNames) return;
+
+    const expected = parentToolNames.filter((name) => !SubsessionManager.BUILTIN_TOOLS.has(name));
+    if (expected.length === 0) return;
+
+    const POLL_INTERVAL = 200;
+    const effectiveMaxWait = maxWait ?? 5000;
+    const deadline = Date.now() + effectiveMaxWait;
+
+    while (Date.now() < deadline) {
+      const current = new Set(session.getAllTools().map((t) => t.name));
+      const missing = expected.filter((name) => !current.has(name));
+      if (missing.length === 0) {
+        logger.debug("subsession", "async-tools-ready", {
+          id,
+          waited: effectiveMaxWait - (deadline - Date.now()),
+          toolCount: current.size,
+        });
+        return;
+      }
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+    }
+
+    // Timed out — log what's still missing but don't block session start
+    const current = new Set(session.getAllTools().map((t) => t.name));
+    const stillMissing = expected.filter((name) => !current.has(name));
+    if (stillMissing.length > 0) {
+      logger.info("subsession", "async-tools-timeout", {
+        id,
+        missing: stillMissing,
+        missingCount: stillMissing.length,
+        maxWait: effectiveMaxWait,
+      });
+    }
+  }
+
+  private static readonly BUILTIN_TOOLS = new Set([
+    "read",
+    "bash",
+    "edit",
+    "write",
+    "grep",
+    "find",
+    "ls",
+    "spawn",
+    "spawn_bg",
+    "list_agents",
+    "halt",
+    "list_minions",
+    "show_minion",
+    "steer_minion",
+  ]);
 
   getMetadata(id: string): MinionSessionMetadata | undefined {
     // Check cache first

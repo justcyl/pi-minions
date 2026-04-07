@@ -12,23 +12,22 @@ tasks:
         fi
         echo "  node $(node --version)"
       - |
-        echo "==> Checking npm..."
-        if ! command -v npm &>/dev/null; then
-          echo "Error: npm is required."
+        echo "==> Checking pnpm..."
+        if ! command -v pnpm &>/dev/null; then
+          echo "Error: pnpm is required. Install with: npm install -g pnpm"
           exit 1
         fi
-        echo "  npm $(npm --version)"
+        echo "  pnpm $(pnpm --version)"
       - |
         echo "==> Checking pi..."
         if ! command -v pi &>/dev/null; then
-          echo "Error: pi is required. Install with: npm install -g @mariozechner/pi-coding-agent"
+          echo "Error: pi is required. Install with: pnpm install -g @mariozechner/pi-coding-agent"
           exit 1
         fi
         echo "  pi $(pi --version 2>/dev/null || echo '(version unavailable)')"
       - |
-        echo "==> Installing npm dependencies..."
-        npm install -g 0x
-        npm install
+        echo "==> Installing dependencies..."
+        pnpm install
         echo "  ✓ Dependencies installed"
       - |
         ln -s $HOME/.pi/agent/sessions tmp/sessions
@@ -84,19 +83,19 @@ tasks:
   typecheck:
     desc: "Run TypeScript type checker"
     cmds:
-      - npx tsc --noEmit
+      - pnpm exec tsc --noEmit
 
   style:
     desc: "Run linter, auto-format code, and type check"
     cmds:
       - |
         echo "==> Running Biome linter and formatter..."
-        npx @biomejs/biome check --write --unsafe --no-errors-on-unmatched --error-on-warnings ./src ./test
+        pnpx @biomejs/biome check --write --unsafe --no-errors-on-unmatched --error-on-warnings ./src ./test
         biome_exit=$?
 
         echo ""
         echo "==> Running TypeScript type checker..."
-        npx tsc --noEmit
+        pnpm exec tsc --noEmit
         tsc_exit=$?
 
         echo ""
@@ -114,9 +113,9 @@ tasks:
     cmds:
       - |
         if [ "{{.JSON_FLAG}}" = "true" ]; then
-          npx vitest run --reporter=json
+          pnpm exec vitest run --reporter=json
         else
-          npx vitest run
+          pnpm exec vitest run
         fi
     silent: true
 
@@ -145,11 +144,11 @@ tasks:
     cmds:
       - mkdir -p tmp/profiles
       - echo "==> Running benchmark tests..."
-      - npx vitest bench test/perf/ --run
+      - pnpm exec vitest bench test/perf/ --run
       - echo "==> Running CPU profiling..."
-      - NODE_OPTIONS='--cpu-prof --cpu-prof-dir=./tmp/profiles' npx vitest bench test/perf/ --run
+      - NODE_OPTIONS='--cpu-prof --cpu-prof-dir=./tmp/profiles' pnpm exec vitest bench test/perf/ --run
       - echo "==> Running heap profiling..."
-      - NODE_OPTIONS='--heap-prof --heap-prof-dir=./tmp/profiles' npx vitest bench test/perf/ --run
+      - NODE_OPTIONS='--heap-prof --heap-prof-dir=./tmp/profiles' pnpm exec vitest bench test/perf/ --run
       - echo ""
       - echo "Profiles saved to tmp/profiles/"
       - ls -lh tmp/profiles/ 2>/dev/null || echo "No profiles generated"
@@ -162,5 +161,5 @@ tasks:
           echo "==> Generating flamegraph with 0x..."
           0x --output-dir ./tmp/profiles -- node ./node_modules/.bin/vitest bench test/perf/ --run
         else
-          echo "==> Skipping flamegraph (0x not installed). Install with: npm install -g 0x"
+          echo "==> Skipping flamegraph (0x not installed). Install with: pnpm install -g 0x"
         fi

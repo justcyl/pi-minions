@@ -95,6 +95,17 @@ export function createMockSession(config?: MockSessionConfig) {
       };
     },
 
+    getAllTools() {
+      return [
+        { name: "read", description: "Read files" },
+        { name: "bash", description: "Run bash" },
+        { name: "edit", description: "Edit files" },
+        { name: "write", description: "Write files" },
+      ];
+    },
+
+    async bindExtensions() {},
+
     state: { messages },
   };
 
