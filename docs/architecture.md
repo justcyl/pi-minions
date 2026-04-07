@@ -50,7 +50,8 @@ graph LR
     tools_minions --> queue
     tools_agents --> agents
 
-    subsessions --> event_bus[event-bus.ts<br/>detach signals]
+    subsessions --> event_bus[event-bus.ts<br/>detach + interaction signals]
+    subsessions --> interaction[interaction.ts<br/>UI interaction forwarding]
 ```
 
 | Module | Purpose |
@@ -59,7 +60,8 @@ graph LR
 | `tree.ts` | `AgentTree` — UI state (status, usage, activity, hierarchy) with change notifications |
 | `subsessions/` | Session lifecycle, metadata persistence, AgentSession access |
 | `subsessions/manager.ts` | `SubsessionManager` — creates and tracks minion sessions |
-| `subsessions/event-bus.ts` | `EventBus` — typed event bus for detach signals |
+| `subsessions/event-bus.ts` | `EventBus` — typed event bus for detach and interaction signals |
+| `subsessions/interaction.ts` | `createMinionUIContext` proxy + `createInteractionHandler` — forwards interactive extension calls from minion to parent |
 | `queue.ts` | `ResultQueue` — holds completed background results for auto-delivery |
 | `spawn.ts` | `runMinionSession()` — orchestrates sessions between AgentTree and SubsessionManager |
 | `minions.ts` | Minion name pool, ID generation, default ephemeral prompt template |
@@ -137,6 +139,46 @@ sequenceDiagram
 ```
 
 The tool returns immediately. The minion is marked `detached` in the tree so the status tracker counts it as background. The session runs independently and its result is auto-delivered via `pi.sendUserMessage()` when complete.
+
+### Interaction forwarding
+
+```mermaid
+sequenceDiagram
+    participant Minion A
+    participant Minion B
+    participant Proxy A
+    participant Proxy B
+    participant EventBus
+    participant Interaction Handler
+    participant FIFO Queue
+    participant Parent ctx.ui
+
+    Minion A->>Proxy A: confirm('Allow?', 'rm -rf')
+    Proxy A->>EventBus: emit(INTERACTION_REQUEST)
+    Minion B->>Proxy B: select('Pick', ['A','B'])
+    Proxy B->>EventBus: emit(INTERACTION_REQUEST)
+
+    EventBus->>Interaction Handler: on(INTERACTION_REQUEST) × 2
+    Interaction Handler->>FIFO Queue: enqueue both requests
+
+    Note over FIFO Queue: Process one at a time
+    FIFO Queue->>Parent ctx.ui: confirm('[Minion A] Allow?', 'rm -rf')
+    Parent ctx.ui-->>FIFO Queue: true
+    FIFO Queue->>EventBus: emit(INTERACTION_RESPONSE for A)
+    EventBus->>Proxy A: on(INTERACTION_RESPONSE)
+    Proxy A-->>Minion A: true
+
+    FIFO Queue->>Parent ctx.ui: select('[Minion B] Pick', ['A','B'])
+    Parent ctx.ui-->>FIFO Queue: 'B'
+    FIFO Queue->>EventBus: emit(INTERACTION_RESPONSE for B)
+    EventBus->>Proxy B: on(INTERACTION_RESPONSE)
+    Proxy B-->>Minion B: 'B'
+
+    Note over Proxy A,Proxy B: On timeout (configurable, default 60s)
+    Proxy A-->>Minion A: method-appropriate default (false / undefined)
+```
+
+Minion sessions receive a proxy `ExtensionUIContext` instead of a real one. When an extension inside the minion calls `confirm()`, `select()`, `input()`, or `editor()`, the proxy emits a request through EventBus. The parent-side handler enqueues requests into a **FIFO queue** and processes them one at a time — the parent TUI can only display one dialog at a time, so concurrent requests are serialized to prevent clobbering. When one completes (or errors), the next is dequeued. If no response arrives within the configured timeout (default 60s, see [Configuration](configuration.md#interactiontimeout)), the proxy returns a safe default.
 
 ## Key concepts
 
@@ -216,7 +258,7 @@ Two complementary notification systems for different use cases:
 | Concern | EventBus | AgentTree |
 |---------|----------|-----------|
 | **Pattern** | Push-based events | Pull-based state + change notifications |
-| **Scope** | Cross-module signals (detach, progress) | Minion hierarchy and status |
+| **Scope** | Cross-module signals (detach, progress, interaction) | Minion hierarchy and status |
 | **Subscribers** | One-shot handlers | Long-lived listeners (UI widgets) |
 | **Persistence** | Ephemeral (fire and forget) | In-memory state until minion removed |
 
@@ -242,6 +284,19 @@ Foreground spawn races `runMinionSession()` against a detach signal via `EventBu
 - **Detach flow:** user runs `/minions bg` → `EventBus.emit(id)` → spawn catches signal → wire result to queue → return "sent to background"
 
 The key insight is that the **same session continues** — there's no kill/respawn. The detach just redirects where the result goes.
+
+### Interaction forwarding
+
+Minion sessions run in isolation, but extensions loaded into those sessions may call interactive UI methods (`confirm`, `select`, `input`, `editor`). Without forwarding, these calls would freeze or silently block because the minion has no direct access to the parent TUI.
+
+The solution is a proxy `ExtensionUIContext` created by `createMinionUIContext()`. It replaces the real UI context when `bindExtensions` runs inside a minion:
+
+- **Interactive methods** (`confirm`, `select`, `input`, `editor`) emit an `InteractionRequest` via EventBus and await a matching `InteractionResponse`. The parent-side `createInteractionHandler()` subscribes to these requests, calls the real `ctx.ui`, and emits the response back.
+- **FIFO serialization** — the handler queues concurrent requests and processes them one at a time. The parent TUI can only show one dialog, so without serialization the last request would clobber earlier ones, orphaning them until timeout. The queue drains in order; errors in one request do not block the next.
+- **`custom()` is a no-op** — it takes over the entire TUI, which is not safe to forward from a minion.
+- **Passive methods** (`notify`, `setStatus`, `setWidget`) are no-ops — they are fire-and-forget and don't require user interaction.
+- **Configurable timeout** (default 60s) — if the parent doesn't respond within `interaction.timeout` seconds, the proxy returns a method-appropriate default: `false` for `confirm`, `undefined` for `select`/`input`/`editor`. See [Configuration](configuration.md#interactiontimeout).
+- **Title prefixing** — all forwarded calls prefix the title with `[minionName]` so the user knows which minion is requesting interaction.
 
 ### Delegation conscience
 

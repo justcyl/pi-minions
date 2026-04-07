@@ -86,6 +86,9 @@ use our researcher agent to investigate testing patterns of this project
     "toolSync": {
       "enabled": true,
       "maxWait": 5
+    },
+    "interaction": {
+      "timeout": 9000
     }
   }
 }

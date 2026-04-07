@@ -14,6 +14,7 @@ import { minionCompleteRenderer } from "./renderers/minion-complete.js";
 import { minionSpawnMessageRenderer } from "./renderers/minion-spawn.js";
 import { createStatusTracker } from "./status.js";
 import { EventBus } from "./subsessions/event-bus.js";
+import { createInteractionHandler } from "./subsessions/interaction.js";
 import { SubsessionManager } from "./subsessions/manager.js";
 import { getTempSessionPath } from "./subsessions/paths.js";
 import { HaltToolParams, halt } from "./tools/halt.js";
@@ -65,6 +66,9 @@ export default function (pi: ExtensionAPI): void {
 
   // EventBus for minion progress streaming
   const eventBus = new EventBus();
+
+  // Forward minion interaction requests to the parent session's UI
+  const _unsubInteraction = createInteractionHandler(eventBus, () => cachedUi);
 
   // Delegation conscience: Track tool calls and inject delegation reminder
   // Config is loaded per-session in the context handler

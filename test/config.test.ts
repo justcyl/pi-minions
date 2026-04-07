@@ -394,6 +394,9 @@ describe("Config types", () => {
         enabled: true,
         maxWait: 5,
       },
+      interaction: {
+        timeout: 60,
+      },
     };
 
     expect(mockResolved.minionNames).toBeDefined();

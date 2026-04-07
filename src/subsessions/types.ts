@@ -36,6 +36,8 @@ export interface CreateMinionSessionOptions {
   parentToolNames?: string[];
   toolSyncEnabled?: boolean;
   toolSyncMaxWait?: number;
+  /** Timeout in ms for interactive UI calls forwarded from minions */
+  interactionTimeout?: number;
   onToolActivity?: (activity: {
     type: "start" | "end";
     toolName: string;

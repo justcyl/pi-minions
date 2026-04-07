@@ -80,6 +80,7 @@ export async function runMinionSession(
     parentToolNames?: string[];
     toolSyncEnabled?: boolean;
     toolSyncMaxWait?: number;
+    interactionTimeout?: number;
     // biome-ignore lint/suspicious/noExplicitAny: external API type
     parentModel?: Model<any>;
     cwd: string;
@@ -152,6 +153,7 @@ export async function runMinionSession(
             parentToolNames: opts.parentToolNames,
             toolSyncEnabled: opts.toolSyncEnabled,
             toolSyncMaxWait: opts.toolSyncMaxWait,
+            interactionTimeout: opts.interactionTimeout,
 
             // Wire callbacks to update BOTH systems
             onToolActivity: (activity) => {

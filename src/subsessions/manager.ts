@@ -11,6 +11,7 @@ import {
 import { logger } from "../logger.js";
 import type { EventBus } from "./event-bus.js";
 import { MINION_COMPLETE_CHANNEL, MINION_PROGRESS_CHANNEL } from "./event-bus.js";
+import { createMinionUIContext } from "./interaction.js";
 import { getMinionsDir } from "./paths.js";
 import type {
   CreateMinionSessionOptions,
@@ -109,7 +110,10 @@ export class SubsessionManager {
     // Bind extensions to trigger session_start — required for extensions that
     // register tools asynchronously.
     // Without this call, session_start never fires and those tools never load.
-    await session.bindExtensions({ shutdownHandler: async () => {} });
+    const uiContext = this.eventBus
+      ? createMinionUIContext(this.eventBus, id, name, options.interactionTimeout ?? 60_000)
+      : undefined;
+    await session.bindExtensions({ uiContext, shutdownHandler: async () => {} });
 
     // Wait for async extension tools to stabilize before starting the session.
     // Some extensions register tools asynchronously after session_start

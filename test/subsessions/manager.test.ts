@@ -566,6 +566,103 @@ describe("SubsessionManager", () => {
       // bindExtensions is an SDK boundary call that triggers session_start
       expect(bindExtensionsMock).toHaveBeenCalledOnce();
     });
+
+    it("passes proxy uiContext to bindExtensions when EventBus provided", async () => {
+      const bindExtensionsMock = vi.fn().mockResolvedValue(undefined);
+
+      const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
+      vi.mocked(createAgentSession).mockImplementationOnce(
+        async () =>
+          ({
+            session: {
+              subscribe: () => () => {},
+              abort: vi.fn(),
+              prompt: vi.fn().mockResolvedValue(undefined),
+              state: { messages: [] },
+              getSessionStats: vi.fn().mockReturnValue({
+                tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+                cost: 0.001,
+              }),
+              getAllTools: vi.fn().mockReturnValue([]),
+              bindExtensions: bindExtensionsMock,
+            },
+          }) as any,
+      );
+
+      // Manager created with EventBus in beforeEach
+      await manager.create({
+        id: "ui-proxy-test",
+        name: "test-minion",
+        task: "do something",
+        config: {
+          name: "test",
+          description: "Test",
+          systemPrompt: "test",
+          source: "ephemeral",
+          filePath: "",
+        },
+        spawnedBy: "tc",
+        cwd: tempDir,
+        modelRegistry: {} as any,
+      });
+
+      expect(bindExtensionsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uiContext: expect.objectContaining({
+            confirm: expect.any(Function),
+            select: expect.any(Function),
+            input: expect.any(Function),
+            editor: expect.any(Function),
+          }),
+        }),
+      );
+    });
+
+    it("skips proxy uiContext when no EventBus", async () => {
+      const bindExtensionsMock = vi.fn().mockResolvedValue(undefined);
+
+      const { createAgentSession } = await import("@mariozechner/pi-coding-agent");
+      vi.mocked(createAgentSession).mockImplementationOnce(
+        async () =>
+          ({
+            session: {
+              subscribe: () => () => {},
+              abort: vi.fn(),
+              prompt: vi.fn().mockResolvedValue(undefined),
+              state: { messages: [] },
+              getSessionStats: vi.fn().mockReturnValue({
+                tokens: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, total: 150 },
+                cost: 0.001,
+              }),
+              getAllTools: vi.fn().mockReturnValue([]),
+              bindExtensions: bindExtensionsMock,
+            },
+          }) as any,
+      );
+
+      // Create manager WITHOUT EventBus
+      const noEventBusManager = new SubsessionManager(tempDir, join(tempDir, "parent.jsonl"));
+
+      await noEventBusManager.create({
+        id: "no-bus-test",
+        name: "test-minion",
+        task: "do something",
+        config: {
+          name: "test",
+          description: "Test",
+          systemPrompt: "test",
+          source: "ephemeral",
+          filePath: "",
+        },
+        spawnedBy: "tc",
+        cwd: tempDir,
+        modelRegistry: {} as any,
+      });
+
+      // uiContext should be undefined when no EventBus
+      const callArgs = bindExtensionsMock.mock.calls[0][0];
+      expect(callArgs.uiContext).toBeUndefined();
+    });
   });
 
   describe("async tool synchronization", () => {

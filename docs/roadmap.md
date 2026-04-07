@@ -19,6 +19,7 @@
 - [x] delegation reminder is very in consistent and there is no feedback when it is received
 - [x] add `/minions version` command to quickly see the running extension version
 - [x] bug: do not send a user message for background minion result, the LLM thinks it is from the user and evaluates as a user message which can lead to confusion
+- [x] forward interactive extension calls (confirm, select, input, editor) from minion sessions to parent UI via EventBus proxy
 - [ ] minion recursion with depth limits (agent frontmatter config)
 - [ ] minion chaining (output of one feeds into another)
 - [ ] bug: when the parent uses the halt tool, the aborted minion still sends back a user message, this is wasteful

@@ -12,6 +12,8 @@ export interface PiMinionsConfig {
   display?: DisplayConfig;
   /** Tool synchronization settings for minion sessions */
   toolSync?: ToolSyncConfig;
+  /** Interaction forwarding settings */
+  interaction?: InteractionConfig;
 }
 
 export interface DelegationConfig {
@@ -28,6 +30,11 @@ export interface ToolSyncConfig {
   enabled?: boolean;
   /** Maximum time in seconds to wait for async tools to register (default: 5) */
   maxWait?: number;
+}
+
+export interface InteractionConfig {
+  /** Timeout in seconds for interactive UI calls forwarded from minions (default: 60) */
+  timeout?: number;
 }
 
 export interface DisplayConfig {
@@ -47,6 +54,7 @@ export interface ResolvedConfig {
   delegation: Required<DelegationConfig>;
   display: Required<DisplayConfig>;
   toolSync: Required<ToolSyncConfig>;
+  interaction: Required<InteractionConfig>;
 }
 
 // Pi settings interface matching the expected structure
@@ -97,6 +105,10 @@ function loadSettings(cwd: string): PiSettings {
           toolSync: {
             ...settings["pi-minions"]?.toolSync,
             ...projectSettings["pi-minions"]?.toolSync,
+          },
+          interaction: {
+            ...settings["pi-minions"]?.interaction,
+            ...projectSettings["pi-minions"]?.interaction,
           },
         };
       }
@@ -206,6 +218,9 @@ export function getConfig(ctx: ExtensionContext): ResolvedConfig {
     toolSync: {
       enabled: user.toolSync?.enabled ?? true,
       maxWait: user.toolSync?.maxWait ?? 5,
+    },
+    interaction: {
+      timeout: user.interaction?.timeout ?? 300,
     },
   };
 }

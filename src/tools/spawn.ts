@@ -433,6 +433,7 @@ async function executeSpawn(
         parentToolNames,
         toolSyncEnabled: piConfig.toolSync.enabled,
         toolSyncMaxWait: piConfig.toolSync.maxWait * 1000,
+        interactionTimeout: piConfig.interaction.timeout * 1000,
         onToolActivity: (activity) => {
           if (activity.type === "start") {
             const desc = formatToolCall(activity.toolName, activity.args ?? {});
@@ -812,6 +813,7 @@ export function spawnBg(
       parentToolNames: pi.getAllTools().map((t) => t.name),
       toolSyncEnabled: piConfig.toolSync.enabled,
       toolSyncMaxWait: piConfig.toolSync.maxWait * 1000,
+      interactionTimeout: piConfig.interaction.timeout * 1000,
       onToolActivity: (activity) => {
         if (activity.type === "start") {
           tree.updateActivity(id, `→ ${formatToolCall(activity.toolName, activity.args ?? {})}`);

@@ -45,6 +45,7 @@ src/
   render.ts          # TUI rendering for spawn calls
   logger.ts          # Structured debug logging
   types.ts           # Shared TypeScript types
+  subsessions/       # Session lifecycle, event bus, interaction forwarding
   tools/             # LLM-callable tool implementations
   commands/          # User command handlers (/spawn, /minions, /halt)
 test/

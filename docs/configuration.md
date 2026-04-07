@@ -34,6 +34,9 @@ Add a `pi-minions` key to your settings file:
     "toolSync": {
       "enabled": true,
       "maxWait": 5
+    },
+    "interaction": {
+      "timeout": 300
     }
   }
 }
@@ -123,6 +126,14 @@ Maximum time in seconds to wait for async extension tools to register in minion 
 |---------|------|-------|
 | 5 | `number` | 0-30 |
 
+### interaction.timeout
+
+Timeout in seconds for interactive UI calls (`confirm`, `select`, `input`, `editor`) forwarded from minion sessions to the parent. If the parent doesn't respond within this window, the proxy returns a safe default (`false` for `confirm`, `undefined` for others). Increase for workflows where interactive prompts require deliberation; decrease if you prefer faster fallback.
+
+| Default | Type | Range |
+|---------|------|-------|
+| 300 | `number` | 5-infinity |
+
 ## Example configurations
 
 ### Minimal custom names
@@ -183,6 +194,18 @@ Maximum time in seconds to wait for async extension tools to register in minion 
 }
 ```
 
+### Shorter interaction timeout
+
+```json
+{
+  "pi-minions": {
+    "interaction": {
+      "timeout": 15
+    }
+  }
+}
+```
+
 ### Full customization
 
 ```json
@@ -203,6 +226,9 @@ Maximum time in seconds to wait for async extension tools to register in minion 
     "toolSync": {
       "enabled": true,
       "maxWait": 5
+    },
+    "interaction": {
+      "timeout": 60
     }
   }
 }
