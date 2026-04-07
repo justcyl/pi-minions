@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-04-07
+
+- feat: inherit authenticated extension tools in minion sessions
+- chore(deps-dev): bump vite from 7.3.1 to 7.3.2
+- chore: do not use @latest for pinned extension in the repo
+- chore: drop @latest from recommended install command
+
 ## [0.12.1] - 2026-04-06
 
 - docs: update readme and other docs to recommend pi-minions install with npm
