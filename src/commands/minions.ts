@@ -30,15 +30,11 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 import { discoverAgents } from "../agents.js";
 import { logger } from "../logger.js";
 import type { ResultQueue } from "../queue.js";
-import {
-  MINION_COMPLETE_CHANNEL,
-  MINION_PROGRESS_CHANNEL,
-  type EventBus,
-} from "../subsessions/event-bus.js";
+import type { EventBus } from "../subsessions/event-bus.js";
 import type { SubsessionManager } from "../subsessions/manager.js";
 import { showMinionObservability } from "../subsessions/observability.js";
 import { executeSteering, validateSteerTarget } from "../tools/minions.js";
-import { detachMinion, spawn } from "../tools/spawn.js";
+import { detachMinion } from "../tools/spawn.js";
 import type { AgentTree } from "../tree.js";
 import { CHANGELOG_PATH, VERSION } from "../version.js";
 
@@ -259,7 +255,9 @@ export function createMinionsHandler(
       const lines = ["Available /minions subcommands:"];
       lines.push("  bg <id|name>       - Send a foreground minion to background");
       lines.push("  changelog          - Show the extension changelog");
-      lines.push("  fg <id|name>       - Bring a background minion to foreground (blocks with progress)");
+      lines.push(
+        "  fg <id|name>       - Bring a background minion to foreground (blocks with progress)",
+      );
       lines.push("  h, help            - Show this help message");
       lines.push("  list               - List available agent types");
       lines.push("  s, show <id|name>  - Show detailed status of a specific minion");
@@ -355,10 +353,7 @@ export function createMinionsHandler(
         return;
       }
       if (!node.detached) {
-        ctx.ui.notify(
-          `Minion ${node.name} (${node.id}) is already in foreground.`,
-          "info",
-        );
+        ctx.ui.notify(`Minion ${node.name} (${node.id}) is already in foreground.`, "info");
         return;
       }
 
@@ -371,7 +366,7 @@ export function createMinionsHandler(
       // This is the same pattern used by /spawn command
       pi.sendUserMessage(
         `Use the spawn tool with ids=["${node.name}"] to bring this background minion to foreground.`,
-        {deliverAs: "steer"}
+        { deliverAs: "steer" },
       );
 
       logger.debug("minions:cmd", "fg-request-sent", { id: node.id, name: node.name });

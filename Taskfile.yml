@@ -30,8 +30,11 @@ tasks:
         pnpm install
         echo "  ✓ Dependencies installed"
       - |
-        mkdir -p tmp/sessions
-        mkdir -p tmp/logs
+        echo "==> Configuring git hooks..."
+        git config core.hooksPath .githooks
+        echo "  ✓ Git hooks path set to .githooks"
+      - |
+        mkdir -p tmp/
       - |
         ln -s $HOME/.pi/agent/sessions tmp/sessions
         echo " "

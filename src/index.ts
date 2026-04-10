@@ -194,8 +194,7 @@ export default function (pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("minions", {
-    description:
-      "Manage minions: /minions [help] for more information",
+    description: "Manage minions: /minions [help] for more information",
     handler: (args, ctx) => {
       if (!subsessionManager) throw new Error("SubsessionManager not initialized");
       return createMinionsHandler(tree, queue, subsessionManager, eventBus, pi)(args, ctx);

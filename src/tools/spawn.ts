@@ -51,7 +51,8 @@ export const SpawnToolParams = Type.Object({
   ids: Type.Optional(
     Type.Array(Type.String(), {
       minItems: 1,
-      description: "Array of minion IDs or names to bring to foreground (use this OR task/tasks, not both)",
+      description:
+        "Array of minion IDs or names to bring to foreground (use this OR task/tasks, not both)",
     }),
   ),
 });
@@ -737,10 +738,10 @@ async function executeSpawn(
 // Attach to existing background minions and bring them to foreground
 async function executeAttach(
   ids: string[],
-  toolCallId: string,
+  _toolCallId: string,
   tree: AgentTree,
   queue: ResultQueue,
-  pi: ExtensionAPI,
+  _pi: ExtensionAPI,
   signal: AbortSignal | undefined,
   onUpdate: AgentToolUpdateCallback<SpawnToolDetails> | undefined,
   ctx: ExtensionContext,
@@ -994,16 +995,7 @@ export function spawn(
     // Check for attach mode first (ids parameter)
     if (isAttachParams(params)) {
       logger.debug("spawn:tool", "attach-mode", { count: params.ids?.length });
-      return executeAttach(
-        params.ids!,
-        _toolCallId,
-        tree,
-        queue,
-        pi,
-        signal,
-        onUpdate,
-        ctx,
-      );
+      return executeAttach(params.ids ?? [], _toolCallId, tree, queue, pi, signal, onUpdate, ctx);
     }
 
     // Validate params - must have either task or tasks, not both

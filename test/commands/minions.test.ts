@@ -141,7 +141,10 @@ describe("parseMinionArgs", () => {
   });
 
   it("'fg target with spaces' parses full target string", () => {
-    expect(parseMinionArgs("fg my minion name")).toEqual({ action: "fg", target: "my minion name" });
+    expect(parseMinionArgs("fg my minion name")).toEqual({
+      action: "fg",
+      target: "my minion name",
+    });
   });
 
   it("'steer bob restart the count' parses target and message", () => {
