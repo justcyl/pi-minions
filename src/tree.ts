@@ -136,6 +136,28 @@ export class AgentTree {
     this.notify();
   }
 
+  /** Mark a node as attached (moved back to foreground) */
+  markAttached(id: string): void {
+    const node = this.nodes.get(id);
+    if (!node) return;
+
+    node.detached = false;
+    this.notify();
+  }
+
+  /** Mark a node as foregrounded (converted from bg to true fg) */
+  markForegrounded(id: string): void {
+    const node = this.nodes.get(id);
+    if (!node) return;
+    node.foregrounded = true;
+    this.notify();
+  }
+
+  /** Check if a node was brought to foreground */
+  isForegrounded(id: string): boolean {
+    return this.nodes.get(id)?.foregrounded ?? false;
+  }
+
   remove(id: string): void {
     const node = this.nodes.get(id);
     if (!node) return;

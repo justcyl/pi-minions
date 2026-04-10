@@ -30,6 +30,9 @@ tasks:
         pnpm install
         echo "  ✓ Dependencies installed"
       - |
+        mkdir -p tmp/sessions
+        mkdir -p tmp/logs
+      - |
         ln -s $HOME/.pi/agent/sessions tmp/sessions
         echo " "
         echo "✓ session files can be found in ./tmp/sessions/"

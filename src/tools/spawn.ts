@@ -47,12 +47,24 @@ export const SpawnToolParams = Type.Object({
       description: "Array of task descriptors for batch spawning (use this OR task, not both)",
     }),
   ),
+  // Attach mode - bring existing background minions to foreground
+  ids: Type.Optional(
+    Type.Array(Type.String(), {
+      minItems: 1,
+      description: "Array of minion IDs or names to bring to foreground (use this OR task/tasks, not both)",
+    }),
+  ),
 });
 export type SpawnToolParams = Static<typeof SpawnToolParams>;
 
 // Type guard for batch detection
 function isBatchParams(params: SpawnToolParams): boolean {
   return "tasks" in params && Array.isArray(params.tasks) && params.tasks.length > 0;
+}
+
+// Type guard for attach mode
+function isAttachParams(params: SpawnToolParams): boolean {
+  return "ids" in params && Array.isArray(params.ids) && params.ids.length > 0;
 }
 
 export const SpawnBgToolParams = Type.Object({
@@ -123,8 +135,8 @@ function resolveConfig(
   return defaultMinionTemplate(name, { model: params.model });
 }
 
-// Process background minion completion - async function that handles the session promise
-async function processBgCompletion(
+// Process minion completion - async function that handles the session promise
+async function processCompletion(
   sessionPromise: Promise<import("../types.js").SpawnResult>,
   id: string,
   name: string,
@@ -140,13 +152,13 @@ async function processBgCompletion(
     result = await sessionPromise;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    logger.error("spawn:bg-completion", "sessionPromise-rejected", { id, name, error: msg });
+    logger.error("spawn:completion", "sessionPromise-rejected", { id, name, error: msg });
     tree.updateStatus(id, "failed", 1, msg);
     logger.error("spawn:tool", "bg-failed", { id, name, error: msg });
     return;
   }
 
-  logger.debug("spawn:bg-completion", "sessionPromise-resolved", {
+  logger.debug("spawn:completion", "sessionPromise-resolved", {
     id,
     name,
     exitCode: result.exitCode,
@@ -159,7 +171,7 @@ async function processBgCompletion(
   const status = result.exitCode === 0 ? "completed" : "failed";
   tree.updateStatus(id, status, result.exitCode, result.error);
   tree.updateUsage(id, result.usage);
-  logger.debug("spawn:bg-completion", "tree-updated", { id, status });
+  logger.debug("spawn:completion", "tree-updated", { id, status });
 
   queue.add({
     id,
@@ -173,7 +185,7 @@ async function processBgCompletion(
     exitCode: result.exitCode,
     error: result.error,
   });
-  logger.debug("spawn:bg-completion", "queue-add-called", { id });
+  logger.debug("spawn:completion", "queue-add-called", { id });
 
   // Content visible to LLM - brief system indicator that parent should react
   const content = `[Background minion "${name}" completed - exit code: ${result.exitCode}]`;
@@ -194,23 +206,27 @@ async function processBgCompletion(
       },
     };
 
-    pi.sendMessage(messagePayload, { triggerTurn: true });
-    logger.debug("spawn:bg-completion", "sendMessage-called", { id, name, triggerTurn: true });
+    if (tree.isForegrounded(id)) {
+      logger.debug("spawn:completion", "minion-was-foregrounded, skipping-sendMessage", { id });
+    } else {
+      pi.sendMessage(messagePayload, { triggerTurn: true });
+      logger.debug("spawn:completion", "sendMessage-called", { id, name, triggerTurn: true });
+    }
   } catch (sendErr) {
     const sendMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
-    logger.error("spawn:bg-completion", "sendMessage-failed", { id, error: sendMsg });
+    logger.error("spawn:completion", "sendMessage-failed", { id, error: sendMsg });
   }
 
   queue.accept(id);
-  logger.info("spawn:tool", "bg-completed", {
+  logger.info("spawn:tool", "completed", {
     id,
     name,
     exitCode: result.exitCode,
   });
 }
 
-// Handle background completion - fire-and-forget wrapper
-function handleBgCompletion(
+// Handle completion - fire-and-forget wrapper
+function handleCompletion(
   sessionPromise: Promise<import("../types.js").SpawnResult>,
   id: string,
   name: string,
@@ -220,9 +236,9 @@ function handleBgCompletion(
   queue: ResultQueue,
   pi: ExtensionAPI,
 ): void {
-  logger.debug("spawn:bg-completion", "handleBgCompletion-called", { id, name, task });
+  logger.debug("spawn:completion", "handleCompletion-called", { id, name, task });
   // Fire-and-forget: don't await the promise, errors are handled internally
-  processBgCompletion(sessionPromise, id, name, task, startTime, tree, queue, pi);
+  processCompletion(sessionPromise, id, name, task, startTime, tree, queue, pi);
 }
 
 // Create shared event bus for detach signals
@@ -516,7 +532,7 @@ async function executeSpawn(
         tree.markDetached(m.id);
         m.detached = true; // Mark as detached so it's filtered from foreground display
         const startTime = tree.get(m.id)?.startTime ?? Date.now();
-        handleBgCompletion(sessionPromise, m.id, m.name, spec.task, startTime, tree, _queue, pi);
+        handleCompletion(sessionPromise, m.id, m.name, spec.task, startTime, tree, _queue, pi);
         // Keep status as running since it's now in background
         m.status = "running";
         m.finalOutput = "Moved to background by user";
@@ -718,6 +734,249 @@ async function executeSpawn(
   return result;
 }
 
+// Attach to existing background minions and bring them to foreground
+async function executeAttach(
+  ids: string[],
+  toolCallId: string,
+  tree: AgentTree,
+  queue: ResultQueue,
+  pi: ExtensionAPI,
+  signal: AbortSignal | undefined,
+  onUpdate: AgentToolUpdateCallback<SpawnToolDetails> | undefined,
+  ctx: ExtensionContext,
+): Promise<AgentToolResult<SpawnToolDetails>> {
+  const piConfig = getConfig(ctx);
+  const spinnerFrames = piConfig.display.spinnerFrames;
+  const outputPreviewLines = piConfig.display.outputPreviewLines;
+
+  logger.info("spawn:tool", "attach-start", { count: ids.length, ids });
+
+  // Resolve minions from IDs/names
+  const minions: BatchMinionItem[] = [];
+  for (const idOrName of ids) {
+    const node = tree.resolve(idOrName);
+    if (!node) {
+      throw new Error(`Minion not found: ${idOrName}`);
+    }
+    if (node.status !== "running") {
+      throw new Error(`Minion ${node.name} is not running (status: ${node.status})`);
+    }
+    minions.push({
+      id: node.id,
+      name: node.name,
+      agentName: node.agentName ?? "ephemeral",
+      task: node.task,
+      status: node.status,
+      usage: { ...node.usage },
+      model: undefined,
+      finalOutput: "",
+      activity: tree.get(node.id)?.lastActivity ?? "attaching...",
+      spinnerFrame: 0,
+    });
+  }
+
+  const isSingleMinion = minions.length === 1;
+  const batchId = generateId();
+  const batchName = isSingleMinion ? minions[0].name : `batch-${batchId.slice(0, 8)}`;
+
+  logger.debug("spawn:tool", "attach-minions", {
+    count: minions.length,
+    names: minions.map((m) => m.name),
+  });
+
+  // Mark all as foregrounded and attached
+  for (const m of minions) {
+    tree.markAttached(m.id);
+    tree.markForegrounded(m.id);
+    logger.debug("spawn:tool", "attach-marked", { id: m.id, name: m.name });
+  }
+
+  let completed = false;
+
+  // Emit update function
+  const emitUpdate = () => {
+    if (completed) return;
+
+    const firstMinion = minions[0];
+    const allCompleted = minions.every((m) => m.status === "completed");
+    const anyFailed = minions.some((m) => m.status === "failed");
+    const anyAborted = minions.some((m) => m.status === "aborted");
+    const status = anyAborted
+      ? "aborted"
+      : anyFailed
+        ? "failed"
+        : allCompleted
+          ? "completed"
+          : "running";
+
+    const totalUsage = minions.reduce(
+      (acc, m) => ({
+        input: acc.input + m.usage.input,
+        output: acc.output + m.usage.output,
+        cacheRead: acc.cacheRead + m.usage.cacheRead,
+        cacheWrite: acc.cacheWrite + m.usage.cacheWrite,
+        cost: acc.cost + m.usage.cost,
+        contextTokens: acc.contextTokens + m.usage.contextTokens,
+        turns: acc.turns + m.usage.turns,
+      }),
+      emptyUsage(),
+    );
+
+    const finalOutput = isSingleMinion
+      ? firstMinion.finalOutput
+      : minions.map((m) => `=== ${m.name} ===\n${m.finalOutput}`).join("\n\n");
+
+    onUpdate?.({
+      content: [{ type: "text", text: "" }],
+      details: {
+        id: isSingleMinion ? firstMinion.id : batchId,
+        name: isSingleMinion ? firstMinion.name : batchName,
+        agentName: isSingleMinion ? firstMinion.agentName : "batch",
+        task: isSingleMinion ? firstMinion.task : `attached batch of ${ids.length} minions`,
+        isBatch: true,
+        minions: [...minions],
+        status,
+        usage: totalUsage,
+        model: undefined,
+        finalOutput,
+        outputPreviewLines,
+        spinnerFrames,
+      },
+    });
+  };
+
+  // Subscribe to tree changes for activity/usage updates
+  const unsubscribeTree = tree.onChange(() => {
+    for (const m of minions) {
+      const node = tree.get(m.id);
+      if (node) {
+        m.status = node.status;
+        m.usage = { ...node.usage };
+        m.finalOutput = node.lastActivity ?? m.finalOutput;
+        m.activity = node.lastActivity ?? m.activity;
+      }
+    }
+    emitUpdate();
+  });
+
+  // Spinner animation
+  const spinnerInterval = setInterval(() => {
+    if (completed) return;
+    for (const m of minions) {
+      if (m.status === "running") {
+        m.spinnerFrame = (m.spinnerFrame ?? 0) + 1;
+      }
+    }
+    emitUpdate();
+  }, 100);
+
+  // Initial update
+  emitUpdate();
+
+  // Wait for all minions to complete
+  try {
+    await new Promise<void>((resolve, reject) => {
+      // Check completion via tree changes
+      const checkInterval = setInterval(() => {
+        const allDone = minions.every((m) => {
+          const node = tree.get(m.id);
+          return node && node.status !== "running";
+        });
+        if (allDone) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+
+      // Handle abort signal
+      if (signal) {
+        const onAbort = () => {
+          clearInterval(checkInterval);
+          reject(new Error("Aborted"));
+        };
+        if (signal.aborted) {
+          onAbort();
+        } else {
+          signal.addEventListener("abort", onAbort, { once: true });
+        }
+      }
+    });
+  } finally {
+    completed = true;
+    clearInterval(spinnerInterval);
+    unsubscribeTree();
+  }
+
+  // Get final results
+  const finalResults = minions.map((m) => {
+    const node = tree.get(m.id);
+    const result = queue.get(m.id);
+    return {
+      ...m,
+      status: node?.status ?? m.status,
+      finalOutput: result?.output ?? m.finalOutput,
+      usage: result?.usage ?? m.usage,
+    };
+  });
+
+  const allCompleted = finalResults.every((m) => m.status === "completed");
+  const anyFailed = finalResults.some((m) => m.status === "failed");
+  const anyAborted = finalResults.some((m) => m.status === "aborted");
+  const finalStatus = anyAborted
+    ? "aborted"
+    : anyFailed
+      ? "failed"
+      : allCompleted
+        ? "completed"
+        : "running";
+
+  const totalUsage = finalResults.reduce(
+    (acc, m) => ({
+      input: acc.input + m.usage.input,
+      output: acc.output + m.usage.output,
+      cacheRead: acc.cacheRead + m.usage.cacheRead,
+      cacheWrite: acc.cacheWrite + m.usage.cacheWrite,
+      cost: acc.cost + m.usage.cost,
+      contextTokens: acc.contextTokens + m.usage.contextTokens,
+      turns: acc.turns + m.usage.turns,
+    }),
+    emptyUsage(),
+  );
+
+  const finalOutput = isSingleMinion
+    ? finalResults[0].finalOutput
+    : finalResults.map((m) => `=== ${m.name} ===\n${m.finalOutput}`).join("\n\n");
+
+  // Build result text
+  const resultText = isSingleMinion
+    ? `Minion ${finalResults[0].name} (${finalResults[0].id}) ${finalStatus}.\n\n${finalOutput || "(no output)"}`
+    : `Batch complete: ${finalResults.filter((m) => m.status === "completed").length} completed\n\n${finalOutput}`;
+
+  const result: AgentToolResult<SpawnToolDetails> = {
+    content: [{ type: "text", text: resultText }],
+    details: {
+      id: isSingleMinion ? finalResults[0].id : batchId,
+      name: isSingleMinion ? finalResults[0].name : batchName,
+      agentName: isSingleMinion ? finalResults[0].agentName : "batch",
+      task: isSingleMinion ? finalResults[0].task : `attached batch of ${ids.length} minions`,
+      status: finalStatus,
+      usage: totalUsage,
+      finalOutput,
+      isBatch: true,
+      minions: finalResults,
+      outputPreviewLines,
+      spinnerFrames,
+    },
+  };
+
+  logger.info("spawn:tool", "attach-complete", {
+    count: minions.length,
+    status: finalStatus,
+  });
+
+  return result;
+}
+
 // Foreground spawn (blocks parent, streams progress)
 export function spawn(
   tree: AgentTree,
@@ -732,6 +991,21 @@ export function spawn(
     onUpdate: AgentToolUpdateCallback<SpawnToolDetails> | undefined,
     ctx: ExtensionContext,
   ): Promise<AgentToolResult<SpawnToolDetails>> {
+    // Check for attach mode first (ids parameter)
+    if (isAttachParams(params)) {
+      logger.debug("spawn:tool", "attach-mode", { count: params.ids?.length });
+      return executeAttach(
+        params.ids!,
+        _toolCallId,
+        tree,
+        queue,
+        pi,
+        signal,
+        onUpdate,
+        ctx,
+      );
+    }
+
     // Validate params - must have either task or tasks, not both
     const hasTask = params.task && typeof params.task === "string" && params.task.length > 0;
     const hasTasks = isBatchParams(params);
@@ -841,7 +1115,7 @@ export function spawnBg(
       hasPi: !!pi,
       hasSendMessage: !!pi.sendMessage,
     });
-    handleBgCompletion(sessionPromise, id, name, params.task, startTime, tree, queue, pi);
+    handleCompletion(sessionPromise, id, name, params.task, startTime, tree, queue, pi);
     logger.debug("spawn:bg", "handleBgCompletion-returned", { id });
 
     const result: AgentToolResult<SpawnToolDetails> = {

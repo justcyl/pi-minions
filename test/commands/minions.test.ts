@@ -131,6 +131,19 @@ describe("parseMinionArgs", () => {
     expect(parseMinionArgs("bg")).toHaveProperty("error");
   });
 
+  it("'fg kevin' returns fg with target", () => {
+    expect(parseMinionArgs("fg kevin")).toEqual({ action: "fg", target: "kevin" });
+  });
+
+  it("'fg' without target returns error", () => {
+    expect(parseMinionArgs("fg")).toHaveProperty("error");
+    expect((parseMinionArgs("fg") as { error: string }).error).toContain("Usage: /minions fg");
+  });
+
+  it("'fg target with spaces' parses full target string", () => {
+    expect(parseMinionArgs("fg my minion name")).toEqual({ action: "fg", target: "my minion name" });
+  });
+
   it("'steer bob restart the count' parses target and message", () => {
     expect(parseMinionArgs("steer bob restart the count")).toEqual({
       action: "steer",

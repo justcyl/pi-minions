@@ -63,6 +63,8 @@ export interface AgentNode {
   lastActivity?: string;
   /** True if moved to background (detached from foreground) */
   detached?: boolean;
+  /** True if brought back to foreground (converted from bg to true fg) */
+  foregrounded?: boolean;
 }
 
 export interface QueuedResult {

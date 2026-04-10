@@ -1204,3 +1204,113 @@ describe("spawnBg — integration with renderer", () => {
     expect(renderResult).toBeUndefined();
   });
 });
+
+// Foreground attachment tests
+describe("spawnBg — foreground attachment", () => {
+  it("markAttached changes minion from bg to fg without affecting completion", async () => {
+    let sessionResolve!: (v: any) => void;
+    vi.mocked(runMinionSession).mockReturnValue(
+      new Promise((r) => {
+        sessionResolve = r;
+      }),
+    );
+
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    await spawnBg(tree, queue, pi, subsessionManager)(
+      "tc",
+      { task: "bg task" },
+      undefined,
+      undefined,
+      createCtx(),
+    );
+
+    const minion = tree.getRunning()[0]!;
+    expect(minion.detached).toBe(true);
+
+    // Move to foreground
+    tree.markAttached(minion.id);
+    expect(tree.get(minion.id)?.detached).toBe(false);
+
+    // Complete the session
+    sessionResolve({
+      exitCode: 0,
+      finalOutput: "done",
+      usage: { ...emptyUsage(), turns: 1 },
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Completion still delivered
+    expect(pi.sendMessage).toHaveBeenCalled();
+    const sendMessageCall = vi.mocked(pi.sendMessage).mock.calls[0];
+    expect(sendMessageCall?.[0]).toMatchObject({
+      customType: "minion-complete",
+    });
+  });
+
+  it("bg→fg→bg cycle: detached flag toggles freely, completion always delivers", async () => {
+    let sessionResolve!: (v: any) => void;
+    vi.mocked(runMinionSession).mockReturnValue(
+      new Promise((r) => {
+        sessionResolve = r;
+      }),
+    );
+
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    await spawnBg(tree, queue, pi, subsessionManager)(
+      "tc",
+      { task: "bg task" },
+      undefined,
+      undefined,
+      createCtx(),
+    );
+
+    const minion = tree.getRunning()[0]!;
+
+    // bg → fg → bg cycle
+    tree.markAttached(minion.id);
+    expect(tree.get(minion.id)?.detached).toBe(false);
+
+    tree.markDetached(minion.id);
+    expect(tree.get(minion.id)?.detached).toBe(true);
+
+    // Complete
+    sessionResolve({
+      exitCode: 0,
+      finalOutput: "done",
+      usage: emptyUsage(),
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Completion delivered
+    expect(pi.sendMessage).toHaveBeenCalled();
+  });
+
+  it("markAttached on non-running minion is a no-op", async () => {
+    vi.mocked(runMinionSession).mockResolvedValue({
+      exitCode: 0,
+      finalOutput: "done",
+      usage: emptyUsage(),
+    });
+
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    await spawnBg(tree, queue, pi, subsessionManager)(
+      "tc",
+      { task: "bg task" },
+      undefined,
+      undefined,
+      createCtx(),
+    );
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Minion completed
+    const minion = tree.getRoots()[0]!;
+    expect(minion.status).toBe("completed");
+
+    // markAttached should not throw
+    expect(() => tree.markAttached(minion.id)).not.toThrow();
+
+    // sendMessage was already called during completion
+    expect(pi.sendMessage).toHaveBeenCalled();
+  });
+});

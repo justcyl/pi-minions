@@ -30,11 +30,15 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 import { discoverAgents } from "../agents.js";
 import { logger } from "../logger.js";
 import type { ResultQueue } from "../queue.js";
-import type { EventBus } from "../subsessions/event-bus.js";
+import {
+  MINION_COMPLETE_CHANNEL,
+  MINION_PROGRESS_CHANNEL,
+  type EventBus,
+} from "../subsessions/event-bus.js";
 import type { SubsessionManager } from "../subsessions/manager.js";
 import { showMinionObservability } from "../subsessions/observability.js";
 import { executeSteering, validateSteerTarget } from "../tools/minions.js";
-import { detachMinion } from "../tools/spawn.js";
+import { detachMinion, spawn } from "../tools/spawn.js";
 import type { AgentTree } from "../tree.js";
 import { CHANGELOG_PATH, VERSION } from "../version.js";
 
@@ -46,6 +50,7 @@ type ParsedArgs =
   | { action: "show-running" }
   | { action: "show"; target: string }
   | { action: "bg"; target: string }
+  | { action: "fg"; target: string }
   | { action: "steer"; target: string; message: string }
   | { error: string };
 
@@ -74,6 +79,14 @@ export function parseMinionArgs(args: string): ParsedArgs {
     return { action, target };
   }
 
+  if (action === "fg") {
+    const target = tokens.slice(1).join(" ").trim();
+    if (!target) {
+      return { error: `Usage: /minions fg <id | name>` };
+    }
+    return { action: "fg", target };
+  }
+
   if (action === "steer") {
     if (tokens.length < 3) {
       return { error: "Usage: /minions steer <id | name> <message>" };
@@ -88,7 +101,7 @@ export function parseMinionArgs(args: string): ParsedArgs {
   if (action === "help" || action === "h") return { action: "help" };
 
   return {
-    error: `Unknown subcommand: ${action}. Use list, show, bg, steer, version, changelog, or help.`,
+    error: `Unknown subcommand: ${action}. Use [help] to see the list of available commands.`,
   };
 }
 
@@ -246,6 +259,7 @@ export function createMinionsHandler(
       const lines = ["Available /minions subcommands:"];
       lines.push("  bg <id|name>       - Send a foreground minion to background");
       lines.push("  changelog          - Show the extension changelog");
+      lines.push("  fg <id|name>       - Bring a background minion to foreground (blocks with progress)");
       lines.push("  h, help            - Show this help message");
       lines.push("  list               - List available agent types");
       lines.push("  s, show <id|name>  - Show detailed status of a specific minion");
@@ -321,6 +335,46 @@ export function createMinionsHandler(
         name: node.name,
       });
       ctx.ui.notify(`Sent ${node.name} (${node.id}) to background.`, "info");
+      return;
+    }
+
+    // fg → brings a background minion to foreground
+    if (parsed.action === "fg") {
+      logger.debug("minions:cmd", "fg", { target: parsed.target });
+      const node = tree.resolve(parsed.target);
+      if (!node) {
+        logger.debug("minions:cmd", "fg-not-found", { target: parsed.target });
+        ctx.ui.notify(`Minion not found: ${parsed.target}`, "error");
+        return;
+      }
+      if (node.status !== "running") {
+        ctx.ui.notify(
+          `Minion ${node.name} (${node.id}) is not running (status: ${node.status}).`,
+          "info",
+        );
+        return;
+      }
+      if (!node.detached) {
+        ctx.ui.notify(
+          `Minion ${node.name} (${node.id}) is already in foreground.`,
+          "info",
+        );
+        return;
+      }
+
+      logger.debug("minions:cmd", "fg-requesting", {
+        id: node.id,
+        name: node.name,
+      });
+
+      // Send directive to parent to use spawn tool with ids parameter
+      // This is the same pattern used by /spawn command
+      pi.sendUserMessage(
+        `Use the spawn tool with ids=["${node.name}"] to bring this background minion to foreground.`,
+        {deliverAs: "steer"}
+      );
+
+      logger.debug("minions:cmd", "fg-request-sent", { id: node.id, name: node.name });
       return;
     }
   };

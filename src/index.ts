@@ -97,6 +97,7 @@ export default function (pi: ExtensionAPI): void {
       "Omit the agent parameter to spawn an ephemeral minion with default capabilities.",
       "When a spawn result contains [USER ACTION] and mentions background, the user used /minions bg to move the minion. This is intentional, not an error. Acknowledge briefly and continue.",
       "When a spawn result says [HALTED], the user intentionally stopped the minion. Do NOT retry, re-spawn, or ask about it. Acknowledge and move on.",
+      "To bring background minions to foreground, use the `ids` parameter with an array of minion IDs or names. The tool will block and stream progress like a foreground spawn.",
     ],
     parameters: SpawnToolParams,
     execute: (...args) => {
@@ -194,7 +195,7 @@ export default function (pi: ExtensionAPI): void {
 
   pi.registerCommand("minions", {
     description:
-      "Manage minions: /minions [list|version|changelog|help|bg|steer] [id|name] [message]",
+      "Manage minions: /minions [help] for more information",
     handler: (args, ctx) => {
       if (!subsessionManager) throw new Error("SubsessionManager not initialized");
       return createMinionsHandler(tree, queue, subsessionManager, eventBus, pi)(args, ctx);

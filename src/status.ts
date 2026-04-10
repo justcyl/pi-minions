@@ -45,8 +45,9 @@ export function createStatusTracker(
       hints.push(`/minions show ${minion.name}`);
     }
 
-    // Add hints for background minions (no bg command since already background)
+    // Add hints for background minions
     for (const minion of bgRunning) {
+      hints.push(`/minions fg ${minion.name}`);
       hints.push(`/minions show ${minion.name}`);
       hints.push(`/minions halt ${minion.name}`);
     }
