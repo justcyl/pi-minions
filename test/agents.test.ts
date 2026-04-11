@@ -83,6 +83,20 @@ describe("loadAgentsFromDir", () => {
     expect(researcher?.model).toBe("claude-sonnet-4-5");
   });
 
+  it("parses displayName field", () => {
+    const tmpBase = join(tmpdir(), `pm-test-${Date.now()}`);
+    const agentsDir = join(tmpBase, "agents");
+    mkdirSync(agentsDir, { recursive: true });
+    writeFileSync(
+      join(agentsDir, "bob.md"),
+      "---\nname: researcher\ndisplayName: Bob\ndescription: Research agent\n---\nYou are Bob.",
+    );
+    const agents = loadAgentsFromDir(agentsDir, "user");
+    const bob = agents.find((a) => a.name === "researcher");
+    expect(bob?.displayName).toBe("Bob");
+    rmSync(tmpBase, { recursive: true, force: true });
+  });
+
   it("sets source on each agent", () => {
     const agents = loadAgentsFromDir(FIXTURES, "user");
     expect(agents.every((a) => a.source === "user")).toBe(true);

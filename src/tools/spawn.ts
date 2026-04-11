@@ -114,26 +114,21 @@ export interface SpawnToolDetails {
   spinnerFrames?: string[];
 }
 
-// Config resolution
-function resolveConfig(
-  params: { agent?: string; task: string; model?: string },
-  name: string,
-  cwd: string,
-): AgentConfig {
-  if (params.agent) {
-    const { agents } = discoverAgents(cwd, "both");
-    const found = agents.find((a) => a.name === params.agent);
-    if (!found) {
-      const available = agents.map((a) => a.name).join(", ") || "none";
-      logger.warn("spawn:tool", "agent not found", {
-        requested: params.agent,
-        available,
-      });
-      throw new Error(`Agent "${params.agent}" not found. Available: ${available}`);
-    }
-    return found;
+// Config resolution for named agents only
+function resolveAgentConfig(agentName: string, cwd: string): AgentConfig {
+  const { agents } = discoverAgents(cwd, "both");
+  const found = agents.find((a) => a.name === agentName);
+
+  if (!found) {
+    const available = agents.map((a) => a.name).join(", ") || "none";
+    logger.warn("spawn:tool", "agent not found", {
+      requested: agentName,
+      available,
+    });
+    throw new Error(`Agent "${agentName}" not found. Available: ${available}`);
   }
-  return defaultMinionTemplate(name, { model: params.model });
+
+  return found;
 }
 
 // Process minion completion - async function that handles the session promise
@@ -304,11 +299,12 @@ async function executeSpawn(
 
   const minions: BatchMinionItem[] = specs.map((spec) => {
     const id = generateId();
-    const name = pickMinionName(tree, id, ctx);
+    const agentConfig = spec.agent ? resolveAgentConfig(spec.agent, ctx.cwd) : undefined;
+
+    const name = pickMinionName(tree, id, ctx, agentConfig?.displayName, assignedNames);
     assignedNames.add(name);
 
-    // Resolve config and model immediately so it's available for emitUpdate
-    const config = resolveConfig(spec, name, ctx.cwd);
+    const config = agentConfig ?? defaultMinionTemplate(name, { model: spec.model });
     const resolvedModel = spec.model ?? config.model ?? ctx.model?.id;
 
     return {
@@ -430,8 +426,9 @@ async function executeSpawn(
       throw new Error(`No spec found for minion at index ${index}`);
     }
 
-    // Config was already resolved when creating minion, but we need it here for runMinionSession
-    const config = resolveConfig(spec, m.name, ctx.cwd);
+    const config = spec.agent
+      ? resolveAgentConfig(spec.agent, ctx.cwd)
+      : defaultMinionTemplate(m.name, { model: spec.model });
 
     // Emit initial update for this minion
     emitUpdate();
@@ -1047,9 +1044,10 @@ export function spawnBg(
     ctx: ExtensionContext,
   ): Promise<AgentToolResult<SpawnToolDetails>> {
     const id = generateId();
-    const name = pickMinionName(tree, id, ctx);
+    const agentConfig = params.agent ? resolveAgentConfig(params.agent, ctx.cwd) : undefined;
+    const name = pickMinionName(tree, id, ctx, agentConfig?.displayName);
+    const config = agentConfig ?? defaultMinionTemplate(name, { model: params.model });
 
-    const config = resolveConfig(params, name, ctx.cwd);
     const resolvedModel = params.model ?? config.model ?? ctx.model?.id;
     const piConfig = getConfig(ctx);
 

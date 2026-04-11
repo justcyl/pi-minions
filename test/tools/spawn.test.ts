@@ -141,6 +141,38 @@ describe("spawn — successful completion", () => {
     );
   });
 
+  it("ephemeral minion config has a non-empty name", async () => {
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    await spawn(tree, queue, pi, subsessionManager)(
+      "tc",
+      { task: "do thing" },
+      undefined,
+      undefined,
+      createCtx(),
+    );
+    const call = vi.mocked(runMinionSession).mock.calls[0];
+    const config = call[0] as any;
+    expect(config.source).toBe("ephemeral");
+    expect(config.name).toBeTruthy();
+    expect(typeof config.name).toBe("string");
+    expect(config.name.length).toBeGreaterThan(0);
+  });
+
+  it("named agent config is not mutated (name stays as declared)", async () => {
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    await spawn(tree, queue, pi, subsessionManager)(
+      "tc",
+      { agent: "scout", task: "find auth" },
+      undefined,
+      undefined,
+      createCtx(),
+    );
+    const call = vi.mocked(runMinionSession).mock.calls[0];
+    const config = call[0] as any;
+    expect(config.name).toBe("scout");
+    expect(config.source).toBe("user");
+  });
+
   it("model override is forwarded to runMinionSession", async () => {
     const { tree, queue, pi, subsessionManager } = createDeps();
     await spawn(tree, queue, pi, subsessionManager)(
@@ -532,6 +564,34 @@ describe("batch spawn execution", () => {
     expect(vi.mocked(runMinionSession)).toHaveBeenCalledTimes(3);
   });
 
+  it("batch ephemeral minions all receive unique non-empty names in configs", async () => {
+    const { tree, queue, pi, subsessionManager } = createDeps();
+
+    vi.mocked(runMinionSession).mockImplementation(async () => ({
+      exitCode: 0,
+      finalOutput: "done",
+      usage: emptyUsage(),
+    }));
+
+    await spawn(tree, queue, pi, subsessionManager)(
+      "tc",
+      { tasks: [{ task: "t1" }, { task: "t2" }, { task: "t3" }] } as any,
+      undefined,
+      undefined,
+      createCtx(),
+    );
+
+    const calls = vi.mocked(runMinionSession).mock.calls;
+    expect(calls).toHaveLength(3);
+    const names = calls.map((c) => (c[0] as any).name);
+    expect(new Set(names).size).toBe(3);
+    for (const name of names) {
+      expect(name).toBeTruthy();
+      expect(typeof name).toBe("string");
+      expect(name.length).toBeGreaterThan(0);
+    }
+  });
+
   it("batch aggregates all minion outputs", async () => {
     const { tree, queue, pi, subsessionManager } = createDeps();
 
@@ -800,6 +860,54 @@ describe("batch spawn with agents", () => {
 // spawnBg — completion result delivery
 
 describe("spawnBg — completion result delivery", () => {
+  it("ephemeral bg minion config has a non-empty name", async () => {
+    vi.mocked(runMinionSession).mockResolvedValue({
+      exitCode: 0,
+      finalOutput: "done",
+      usage: emptyUsage(),
+    });
+
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    await spawnBg(tree, queue, pi, subsessionManager)(
+      "tc",
+      { task: "bg task" },
+      undefined,
+      undefined,
+      createCtx(),
+    );
+
+    await new Promise((r) => setTimeout(r, 10));
+    const call = vi.mocked(runMinionSession).mock.calls[0];
+    const config = call[0] as any;
+    expect(config.source).toBe("ephemeral");
+    expect(config.name).toBeTruthy();
+    expect(typeof config.name).toBe("string");
+    expect(config.name.length).toBeGreaterThan(0);
+  });
+
+  it("named agent bg config is not mutated", async () => {
+    vi.mocked(runMinionSession).mockResolvedValue({
+      exitCode: 0,
+      finalOutput: "done",
+      usage: emptyUsage(),
+    });
+
+    const { tree, queue, pi, subsessionManager } = createDeps();
+    await spawnBg(tree, queue, pi, subsessionManager)(
+      "tc",
+      { agent: "scout", task: "bg task" },
+      undefined,
+      undefined,
+      createCtx(),
+    );
+
+    await new Promise((r) => setTimeout(r, 10));
+    const call = vi.mocked(runMinionSession).mock.calls[0];
+    const config = call[0] as any;
+    expect(config.name).toBe("scout");
+    expect(config.source).toBe("user");
+  });
+
   it("calls pi.sendMessage with customType 'minion-complete' when background minion succeeds", async () => {
     vi.mocked(runMinionSession).mockResolvedValue({
       exitCode: 0,

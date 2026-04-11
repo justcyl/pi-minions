@@ -4,6 +4,7 @@ export type AgentSource = "user" | "project" | "ephemeral";
 
 export interface AgentConfig {
   name: string;
+  displayName?: string;
   description: string;
   tools?: string[];
   model?: string;

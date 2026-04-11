@@ -63,6 +63,7 @@ export function loadAgentsFromDir(dir: string, source: AgentSource): AgentConfig
 
     agents.push({
       name,
+      displayName: frontmatter.displayName,
       description: frontmatter.description,
       tools: tools && tools.length > 0 ? tools : undefined,
       model: frontmatter.model,

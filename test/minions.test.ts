@@ -87,4 +87,29 @@ describe("pickMinionName", () => {
     const tree = new AgentTree();
     expect(pickMinionName(tree, "x")).toBeTruthy();
   });
+
+  it("uses preferredName when no collision", () => {
+    const tree = new AgentTree();
+    expect(pickMinionName(tree, "x", undefined, "Bob")).toBe("Bob");
+  });
+
+  it("deduplicates preferredName with a 4-char UUID suffix", () => {
+    const tree = new AgentTree();
+    tree.add("a", "Bob", "task1");
+    const name = pickMinionName(tree, "b", undefined, "Bob");
+    expect(name).toMatch(/^Bob-[a-f0-9]{4}$/);
+  });
+
+  it("avoids collisions with reserved names in the same batch", () => {
+    const tree = new AgentTree();
+    const reserved = new Set(["Bob"]);
+    const name = pickMinionName(tree, "b", undefined, "Bob", reserved);
+    expect(name).toMatch(/^Bob-[a-f0-9]{4}$/);
+  });
+
+  it("falls back to random names when no preferredName is given", () => {
+    const tree = new AgentTree();
+    const name = pickMinionName(tree, "x");
+    expect(name).toBeTruthy();
+  });
 });

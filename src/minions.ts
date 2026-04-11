@@ -11,9 +11,25 @@ export function pickMinionName(
   tree: AgentTree,
   fallbackId: string,
   ctx?: ExtensionContext,
+  preferredName?: string,
+  reservedNames?: Set<string>,
 ): string {
+  const inUse = new Set([
+    ...tree.getRunning().map((n) => n.name),
+    ...(reservedNames ? Array.from(reservedNames) : []),
+  ]);
+
+  if (preferredName) {
+    if (!inUse.has(preferredName)) return preferredName;
+    let candidate: string;
+    do {
+      const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 4);
+      candidate = `${preferredName}-${suffix}`;
+    } while (inUse.has(candidate));
+    return candidate;
+  }
+
   const names = ctx ? getConfig(ctx).minionNames : DEFAULT_MINION_NAMES;
-  const inUse = new Set(tree.getRunning().map((n) => n.name));
   const available = names.filter((n) => !inUse.has(n));
   const useFallback = available.length === 0;
   const availableLength = available.length === 0 ? names.length : available.length;
