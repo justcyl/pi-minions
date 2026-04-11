@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-04-11
+
+- BREAKING CHANGE: rename `list_minions` to `list_minion_types` for listing available agent types
+- feat: add `list_minions` tool to list all active minions in a session
+- feat: support displayName in agent frontmatter for minion naming
+- feat: persist minion activity history and fix showMinion by name
+- fix: reduce default tool call threshold to 16 from 32
+- refactor: extract spawn tooling into domain modules
+
 ## [0.15.0] - 2026-04-09
 
 - feat: add foreground attach for background minions
