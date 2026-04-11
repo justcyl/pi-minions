@@ -52,7 +52,7 @@ describe("getConfig", () => {
 
       expect(config.minionNames).toEqual(DEFAULT_MINION_NAMES);
       expect(config.delegation.enabled).toBe(true);
-      expect(config.delegation.toolCallThreshold).toBe(32);
+      expect(config.delegation.toolCallThreshold).toBe(16);
       expect(config.delegation.hintIntervalMinutes).toBe(8);
       expect(config.display.outputPreviewLines).toBe(20);
       expect(config.display.observabilityLines).toBe(6);

@@ -66,7 +66,7 @@ Number of tool calls before the delegation hint appears. The hint reminds you to
 
 | Default | Type | Range |
 |---------|------|-------|
-| 8 | `number` | 1-100 |
+| 16 | `number` | 1-100 |
 
 ### delegation.hintIntervalMinutes
 

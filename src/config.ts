@@ -206,7 +206,7 @@ export function getConfig(ctx: ExtensionContext): ResolvedConfig {
     minionNames: [...(user.minionNames ?? DEFAULT_MINION_NAMES)],
     delegation: {
       enabled: user.delegation?.enabled ?? true,
-      toolCallThreshold: user.delegation?.toolCallThreshold ?? 32,
+      toolCallThreshold: user.delegation?.toolCallThreshold ?? 16,
       hintIntervalMinutes: user.delegation?.hintIntervalMinutes ?? 8,
     },
     display: {
