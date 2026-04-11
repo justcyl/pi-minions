@@ -7,7 +7,6 @@ import type { SubsessionManager } from "../subsessions/manager.js";
 import { getMinionHistory } from "../subsessions/observability.js";
 import type { AgentTree } from "../tree.js";
 import type { AgentNode } from "../types.js";
-import type { ListAgentsParams } from "./list-agents.js";
 
 // Shared validation helpers
 
@@ -74,12 +73,79 @@ export async function executeSteering(
   return `Steered ${node.name} (${node.id}): ${message}`;
 }
 
-// list_minion_types
+// list_minions
 
-export type ListMinionsParams = Static<typeof ListAgentsParams>;
+export const ListMinionsParams = Type.Object(
+  {},
+  {
+    description:
+      "List all running and completed (pending delivery) minions. No parameters required.",
+  },
+);
+export type ListMinionsParams = Static<typeof ListMinionsParams>;
 
-export function listMinions() {
-  // TODO:
+export interface MinionInfo {
+  id: string;
+  name: string;
+  task: string;
+  status: "running";
+  mode: "foreground" | "background";
+  lastActivity?: string;
+}
+
+export interface PendingMinionInfo {
+  id: string;
+  name: string;
+  task: string;
+  completedAt: number;
+  exitCode: number;
+}
+
+export function listMinions(tree: AgentTree, queue: ResultQueue) {
+  return async function execute(
+    _toolCallId: string,
+    _params: ListMinionsParams,
+    _signal: AbortSignal | undefined,
+    _onUpdate: unknown,
+    _ctx: ExtensionContext,
+  ): Promise<AgentToolResult<{ running: MinionInfo[]; pending: PendingMinionInfo[] }>> {
+    const running: MinionInfo[] = tree.getRunning().map((n) => ({
+      id: n.id,
+      name: n.name,
+      task: n.task,
+      status: "running" as const,
+      mode: (n.detached ? "background" : "foreground") as "foreground" | "background",
+      lastActivity: n.lastActivity,
+    }));
+    const pending: PendingMinionInfo[] = queue.getPending().map((r) => ({
+      id: r.id,
+      name: r.name,
+      task: r.task,
+      completedAt: r.completedAt,
+      exitCode: r.exitCode,
+    }));
+
+    const lines: string[] = [];
+    if (running.length === 0 && pending.length === 0) {
+      lines.push("No active minions.");
+    } else {
+      lines.push(`Running (${running.length}):`);
+      for (const m of running) {
+        const mode = m.mode === "background" ? "[bg]" : "[fg]";
+        const activity = m.lastActivity ? ` -- ${m.lastActivity}` : "";
+        lines.push(`  ${m.name} (${m.id}) ${mode}: ${m.task}${activity}`);
+      }
+      lines.push(`Completed (${pending.length}):`);
+      for (const p of pending) {
+        lines.push(`  ${p.name} (${p.id}): exit ${p.exitCode}`);
+      }
+    }
+
+    return {
+      content: [{ type: "text", text: lines.join("\n") }],
+      details: { running, pending },
+    };
+  };
 }
 
 // steer_minion

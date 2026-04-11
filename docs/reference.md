@@ -10,7 +10,8 @@
 | [`spawn_bg`](#spawn--spawn_bg) | Tool | Background task delegation (returns immediately) |
 | [`halt`](#halt) | Tool | Abort running minion(s) |
 | [`list_agents`](#list_agents) | Tool | Discover available named agents |
-| [`list_minion_types`](#list_minion_types) | Tool | List running and pending minions |
+| [`list_minion_types`](#list_minion_types) | Tool | List available agent types (alias for list_agents) |
+| [`list_minions`](#list_minions) | Tool | List running and completed (pending delivery) minions |
 | [`show_minion`](#show_minion) | Tool | Detailed minion status |
 | [`steer_minion`](#steer_minion) | Tool | Inject message into running minion |
 | [`/spawn`](#spawn-1) | Command | Spawn minion (user-initiated) |
@@ -106,15 +107,23 @@ Discovers agents from global and project directories. See [Agents — Where to p
 
 ### list_minion_types
 
-List running and pending minions.
+Lists available agent types. Alias for `list_agents`. Prefer `list_agents` for agent discovery.
+
+**Schema:** `{}` (no parameters)
+
+---
+
+### list_minions
+
+List all running and completed (pending delivery) minions in the current session.
 
 **Schema:** `{}` (no parameters)
 
 **Returns:**
 ```typescript
 {
-  running: Array<{ id, name, task, status: "running", mode: "foreground" | "background", lastActivity }>,
-  pending: Array<{ id, name, task, status: "pending", completedAt }>
+  running: Array<{ id, name, task, status: "running", mode: "foreground" | "background", lastActivity? }>,
+  pending: Array<{ id, name, task, completedAt: number, exitCode: number }>
 }
 ```
 

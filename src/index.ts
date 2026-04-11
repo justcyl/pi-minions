@@ -19,7 +19,14 @@ import { SubsessionManager } from "./subsessions/manager.js";
 import { getTempSessionPath } from "./subsessions/paths.js";
 import { HaltToolParams, halt } from "./tools/halt.js";
 import { ListAgentsParams, listAgents } from "./tools/list-agents.js";
-import { ShowMinionParams, SteerMinionParams, showMinion, steerMinion } from "./tools/minions.js";
+import {
+  ListMinionsParams,
+  listMinions,
+  ShowMinionParams,
+  SteerMinionParams,
+  showMinion,
+  steerMinion,
+} from "./tools/minions.js";
 import { SpawnBgToolParams, SpawnToolParams, spawn, spawnBg } from "./tools/spawn.js";
 import { AgentTree } from "./tree.js";
 
@@ -147,11 +154,25 @@ export default function (pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "list_minion_types",
-    label: "List Minions",
+    label: "List Minion Types",
     description: "List available agent types that can be spawned as minions.",
     promptSnippet: "List available minion types",
     parameters: ListAgentsParams,
     execute: listAgents(),
+  });
+
+  pi.registerTool({
+    name: "list_minions",
+    label: "List Minions",
+    description:
+      "List all running and completed (pending delivery) minions in the current session.",
+    promptSnippet: "List all running and recently completed minions",
+    promptGuidelines: [
+      "Use list_minions to check what minions are currently running before spawning new ones.",
+      "Completed minions appear under 'pending' until their result is consumed by the next turn.",
+    ],
+    parameters: ListMinionsParams,
+    execute: (...args) => listMinions(tree, queue)(...args),
   });
 
   pi.registerTool({
