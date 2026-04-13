@@ -39,25 +39,26 @@ import type { AgentTree } from "../tree.js";
 import { CHANGELOG_PATH, VERSION } from "../version.js";
 import { Key, matchesKey, Text } from "@mariozechner/pi-tui";
 
-/** Show a static details panel for a completed minion. q/esc to close. */
+/** Show a static details panel for a completed minion. q/esc to close, tab/shift+tab to cycle. */
 async function showCompletedMinionDetails(
   ctx: ExtensionCommandContext,
   text: string,
-): Promise<void> {
+  onCycle?: (direction: "next" | "prev") => void,
+): Promise<{ action: "close" | "cycle" }> {
   const WIDGET_KEY = "minion-static-details";
   return new Promise((resolve) => {
     let unsubscribeInput: (() => void) | null = null;
-    const close = () => {
+    const close = (action: "close" | "cycle" = "close") => {
       unsubscribeInput?.();
       unsubscribeInput = null;
       ctx.ui.setWidget(WIDGET_KEY, undefined);
-      resolve();
+      resolve({ action });
     };
     ctx.ui.setWidget(
       WIDGET_KEY,
       (_tui: unknown, theme: Theme) => {
         const width = process.stdout.columns || 80;
-        const header = theme.fg("dim", "q/esc:close");
+        const header = theme.fg("dim", "q/esc:close · tab/shift+tab:navigate");
         const sep = theme.fg("dim", "─".repeat(Math.min(width, 80)));
         const body = text
           .split("\n")
@@ -69,7 +70,13 @@ async function showCompletedMinionDetails(
     );
     unsubscribeInput = ctx.ui.onTerminalInput((data: string) => {
       if (data === "q" || data === "Q" || matchesKey(data, Key.escape)) {
-        close();
+        close("close");
+      } else if (matchesKey(data, Key.tab)) {
+        onCycle?.("next");
+        close("cycle");
+      } else if (matchesKey(data, Key.shift(Key.tab))) {
+        onCycle?.("prev");
+        close("cycle");
       }
       return { consume: true };
     });
@@ -152,6 +159,7 @@ function getSortedMinionIds(tree: AgentTree): string[] {
 async function showMinionWithCycling(
   ctx: ExtensionCommandContext,
   tree: AgentTree,
+  queue: ResultQueue,
   eventBus: EventBus,
   startMinionId: string,
 ): Promise<void> {
@@ -174,8 +182,27 @@ async function showMinionWithCycling(
   };
 
   while (currentId) {
-    logger.debug("minions:cmd", "opening-observability", { currentId });
+    logger.debug("minions:cmd", "opening-view", { currentId });
+    const node = tree.get(currentId);
 
+    if (node && node.status !== "running") {
+      // Completed/failed/aborted → static details panel with cycling
+      const text = buildShowMinionText(tree, queue, currentId);
+      if (!text) return;
+
+      let nextId: string | null = null;
+      const result = await showCompletedMinionDetails(
+        ctx,
+        text,
+        (direction) => { nextId = cycleToMinion(currentId!, direction); },
+      );
+
+      if (result.action === "close") return;
+      if (nextId) { currentId = nextId; continue; }
+      return;
+    }
+
+    // Running → live observability widget
     let nextId: string | null = null;
     const result = await showMinionObservability(ctx, tree, eventBus, currentId, (direction) => {
       nextId = currentId ? cycleToMinion(currentId, direction) : null;
@@ -252,7 +279,7 @@ export function createMinionsHandler(
         return;
       }
 
-      await showMinionWithCycling(ctx, tree, eventBus, sortedIds[0] ?? "");
+      await showMinionWithCycling(ctx, tree, _queue, eventBus, sortedIds[0] ?? "");
       return;
     }
 
@@ -315,19 +342,8 @@ export function createMinionsHandler(
         return;
       }
 
-      // Running minion → live observability widget
-      if (node.status === "running") {
-        await showMinionWithCycling(ctx, tree, eventBus, node.id);
-        return;
-      }
-
-      // Completed/failed/aborted → static details panel with full output
-      const text = buildShowMinionText(tree, _queue, node.id);
-      if (text) {
-        await showCompletedMinionDetails(ctx, text);
-      } else {
-        ctx.ui.notify(`No details available for: ${parsed.target}`, "info");
-      }
+      // Unified: showMinionWithCycling handles both running and completed
+      await showMinionWithCycling(ctx, tree, _queue, eventBus, node.id);
       return;
     }
 

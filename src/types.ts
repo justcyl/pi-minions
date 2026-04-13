@@ -72,6 +72,8 @@ export interface AgentNode {
   output?: string;
   /** Session file path for export/resume */
   sessionPath?: string;
+  /** Model used by this minion (e.g. "axonhub/claude-sonnet-4-6") */
+  model?: string;
 }
 
 export interface QueuedResult {

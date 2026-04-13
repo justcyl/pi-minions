@@ -155,6 +155,15 @@ export class AgentTree {
     }
   }
 
+  /** Store the model used by a minion */
+  setModel(id: string, model: string | undefined): void {
+    const node = this.nodes.get(id);
+    if (node && model) {
+      node.model = model;
+      this.notify();
+    }
+  }
+
   /** Mark a node as detached (moved to background) */
   markDetached(id: string): void {
     const node = this.nodes.get(id);

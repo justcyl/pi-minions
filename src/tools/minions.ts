@@ -198,21 +198,19 @@ export function buildShowMinionText(
   if (node) {
     // ── Header ──────────────────────────────────────────────────────────
     const mode = node.detached ? "[bg]" : "[fg]";
-    const displayName =
-      node.agentName && node.agentName !== "ephemeral"
-        ? `${node.agentName} ${node.name}`
-        : node.name;
-    lines.push(`${displayName} (${node.id}) ${mode}`);
+    lines.push(`${node.name} (${node.id}) ${mode}`);
+    if (node.agentName && node.agentName !== "ephemeral") {
+      lines.push(`  Agent:    ${node.agentName}`);
+    }
+    if (node.model) {
+      lines.push(`  Model:    ${node.model}`);
+    }
     lines.push(`  Status:   ${node.status}`);
     lines.push(`  Task:     ${node.task}`);
 
     if (node.status === "running") {
       lines.push(`  Running:  ${formatDuration(Date.now() - node.startTime)}`);
       if (node.lastActivity) lines.push(`  Activity: ${node.lastActivity}`);
-    }
-
-    if (node.endTime) {
-      lines.push(`  Duration: ${formatDuration(node.endTime - node.startTime)}`);
     }
 
     const usageText = formatUsage(node.usage);
