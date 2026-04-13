@@ -30,6 +30,11 @@ function resolveAgentConfig(agentName: string, cwd: string): AgentConfig {
   return found;
 }
 
+function tryFindAgent(agentName: string, cwd: string): AgentConfig | undefined {
+  const { agents } = discoverAgents(cwd, "both");
+  return agents.find((a) => a.name === agentName);
+}
+
 export async function runSingleMinion(opts: {
   spec: { task: string; agent?: string; model?: string };
   m: BatchMinionItem;
@@ -73,9 +78,10 @@ export async function runSingleMinion(opts: {
     coordinator,
   } = opts;
 
-  const config = spec.agent
+  const config = (spec.agent
     ? resolveAgentConfig(spec.agent, ctx.cwd)
-    : defaultMinionTemplate(m.name, { model: spec.model });
+    : tryFindAgent("default", ctx.cwd))
+    ?? defaultMinionTemplate(m.name, { model: spec.model });
 
   coordinator.emit(true);
 

@@ -114,7 +114,7 @@ export interface SpawnToolDetails {
   spinnerFrames?: string[];
 }
 
-// Config resolution for named agents only
+// Config resolution — throws for explicit agent names, returns undefined for missing "default"
 function resolveAgentConfig(agentName: string, cwd: string): AgentConfig {
   const { agents } = discoverAgents(cwd, "both");
   const found = agents.find((a) => a.name === agentName);
@@ -129,6 +129,12 @@ function resolveAgentConfig(agentName: string, cwd: string): AgentConfig {
   }
 
   return found;
+}
+
+/** Like resolveAgentConfig but returns undefined instead of throwing — used for optional "default" lookup */
+function tryFindAgent(agentName: string, cwd: string): AgentConfig | undefined {
+  const { agents } = discoverAgents(cwd, "both");
+  return agents.find((a) => a.name === agentName);
 }
 
 export { detachMinion } from "../spawn/index.js";
@@ -173,7 +179,9 @@ async function executeSpawn(
 
   const minions: BatchMinionItem[] = specs.map((spec) => {
     const id = generateId();
-    const agentConfig = spec.agent ? resolveAgentConfig(spec.agent, ctx.cwd) : undefined;
+    const agentConfig = spec.agent
+      ? resolveAgentConfig(spec.agent, ctx.cwd)
+      : tryFindAgent("default", ctx.cwd);
 
     const name = pickMinionName(tree, id, ctx, agentConfig?.displayName, assignedNames);
     assignedNames.add(name);
@@ -184,7 +192,7 @@ async function executeSpawn(
     return {
       id,
       name,
-      agentName: spec.agent ?? "ephemeral",
+      agentName: spec.agent ?? "default",
       task: spec.task,
       status: "running",
       usage: emptyUsage(),
@@ -594,7 +602,9 @@ export function spawnBg(
     ctx: ExtensionContext,
   ): Promise<AgentToolResult<SpawnToolDetails>> {
     const id = generateId();
-    const agentConfig = params.agent ? resolveAgentConfig(params.agent, ctx.cwd) : undefined;
+    const agentConfig = params.agent
+      ? resolveAgentConfig(params.agent, ctx.cwd)
+      : tryFindAgent("default", ctx.cwd);
     const name = pickMinionName(tree, id, ctx, agentConfig?.displayName);
     const config = agentConfig ?? defaultMinionTemplate(name, { model: params.model });
 
@@ -604,11 +614,11 @@ export function spawnBg(
     logger.info("spawn:tool", "start-bg", {
       id,
       name,
-      agent: params.agent ?? "ephemeral",
+      agent: params.agent ?? "default",
       task: params.task,
     });
 
-    tree.add(id, name, params.task, undefined, params.agent ?? "ephemeral");
+    tree.add(id, name, params.task, undefined, params.agent ?? "default");
     tree.setModel(id, resolvedModel);
     tree.markDetached(id);
 

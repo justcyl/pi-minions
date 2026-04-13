@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getAgentDir, parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import type { AgentConfig, AgentSource, ThinkingLevel } from "./types.js";
 
@@ -133,8 +134,12 @@ export function discoverAgents(
       projectAgents.push(...loadAgentsFromDir(dotMinionsProjectDir, "project"));
   }
 
-  // Build map: project overrides user on same name
+  // Build map: package (lowest) < user < project (highest)
+  const packageAgentsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "agents");
+  const packageAgents = scope !== "project" ? loadAgentsFromDir(packageAgentsDir, "user") : [];
+
   const agentMap = new Map<string, AgentConfig>();
+  for (const a of packageAgents) agentMap.set(a.name, a);
   for (const a of userAgents) agentMap.set(a.name, a);
   for (const a of projectAgents) agentMap.set(a.name, a);
 
