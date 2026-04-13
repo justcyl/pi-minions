@@ -68,6 +68,10 @@ export interface AgentNode {
   detached?: boolean;
   /** True if brought back to foreground (converted from bg to true fg) */
   foregrounded?: boolean;
+  /** Final output from the minion (set on completion, persists after queue is cleared) */
+  output?: string;
+  /** Session file path for export/resume */
+  sessionPath?: string;
 }
 
 export interface QueuedResult {

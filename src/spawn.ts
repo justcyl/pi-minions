@@ -191,9 +191,6 @@ export async function runMinionSession(
               turnCount = count;
               transcript.write(`\n--- turn ${count} ---`);
 
-              // Update AgentTree
-              tree?.logActivity(id, `turn ${count}`);
-
               // Step limit enforcement
               if (config.steps !== undefined && count >= config.steps && !stepLimitReached) {
                 stepLimitReached = true;
@@ -244,6 +241,9 @@ export async function runMinionSession(
             },
           })
           .then((handle) => {
+            // Store session file path in tree for later inspection
+            if (handle.path) tree?.setCompletion(id, undefined, handle.path);
+
             // Wire abort signal - abort always means halt (stop the session)
             if (opts.signal) {
               const onAbort = () => {

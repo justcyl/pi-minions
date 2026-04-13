@@ -145,6 +145,16 @@ export class AgentTree {
     }
   }
 
+  /** Store final output and session path when a minion completes */
+  setCompletion(id: string, output?: string, sessionPath?: string): void {
+    const node = this.nodes.get(id);
+    if (node) {
+      if (output !== undefined) node.output = output;
+      if (sessionPath !== undefined) node.sessionPath = sessionPath;
+      this.notify();
+    }
+  }
+
   /** Mark a node as detached (moved to background) */
   markDetached(id: string): void {
     const node = this.nodes.get(id);

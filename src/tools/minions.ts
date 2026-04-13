@@ -194,49 +194,72 @@ export function buildShowMinionText(
   }
 
   const lines: string[] = [];
+
   if (node) {
-    // Header with mode badge and agent name
+    // ── Header ──────────────────────────────────────────────────────────
     const mode = node.detached ? "[bg]" : "[fg]";
     const displayName =
       node.agentName && node.agentName !== "ephemeral"
         ? `${node.agentName} ${node.name}`
         : node.name;
     lines.push(`${displayName} (${node.id}) ${mode}`);
-    lines.push(`  Status: ${node.status}`);
-    lines.push(`  Task: ${node.task}`);
+    lines.push(`  Status:   ${node.status}`);
+    lines.push(`  Task:     ${node.task}`);
 
     if (node.status === "running") {
-      lines.push(`  Running for: ${formatDuration(Date.now() - node.startTime)}`);
+      lines.push(`  Running:  ${formatDuration(Date.now() - node.startTime)}`);
       if (node.lastActivity) lines.push(`  Activity: ${node.lastActivity}`);
     }
 
-    if (node.endTime) lines.push(`  Duration: ${formatDuration(node.endTime - node.startTime)}`);
-    const usageText = formatUsage(node.usage);
-    lines.push(`  Usage: ${usageText || "N/A"}`);
-    if (node.error) lines.push(`  Error: ${node.error}`);
+    if (node.endTime) {
+      lines.push(`  Duration: ${formatDuration(node.endTime - node.startTime)}`);
+    }
 
-    // Include recent activity history
+    const usageText = formatUsage(node.usage);
+    if (usageText) lines.push(`  Usage:    ${usageText}`);
+    if (node.error) lines.push(`  Error:    ${node.error}`);
+
+    // ── Session file path ────────────────────────────────────────────────
+    if (node.sessionPath) {
+      lines.push("");
+      lines.push(`  Session file:`);
+      lines.push(`    ${node.sessionPath}`);
+      lines.push(`  Export:  pi --export ${node.sessionPath}`);
+      lines.push(`  Resume:  pi --session ${node.sessionPath}`);
+    }
+
+    // ── Activity history ─────────────────────────────────────────────────
     const history = node.activityHistory ?? getMinionHistory(node.id);
     if (history.length > 0) {
-      lines.push(`  Recent activity:`);
+      lines.push("");
+      lines.push(`  Activity log:`);
       for (const msg of history) {
         lines.push(`    ${msg}`);
       }
     }
 
-    // Suggest interactive view for live updates
     if (node.status === "running") {
       lines.push(`\n  Tip: Use '/minions show ${node.name}' for live activity stream`);
     }
-  }
-  if (result) {
-    if (!node) lines.push(`${result.name} (${result.id})`);
+
+    // ── Final output ─────────────────────────────────────────────────────
+    const output = node.output ?? result?.output;
+    if (output) {
+      lines.push("");
+      lines.push(`  Output:`);
+      lines.push(output.split("\n").map((l) => `    ${l}`).join("\n"));
+    }
+  } else if (result) {
+    // Fallback: only queue result, no tree node
+    lines.push(`${result.name} (${result.id})`);
     lines.push(`  Exit code: ${result.exitCode}`);
     if (result.output) {
-      const preview = result.output.split("\n").slice(0, 10).join("\n");
-      lines.push(`  Output:\n${preview}`);
+      lines.push("");
+      lines.push(`  Output:`);
+      lines.push(result.output.split("\n").map((l) => `    ${l}`).join("\n"));
     }
   }
+
   return lines.join("\n");
 }
 

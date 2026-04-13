@@ -46,8 +46,8 @@ export function getMinionHistory(minionId: string): string[] {
       }
     }
 
-    // Return last 4 activities
-    return activities.slice(-4);
+    // Return last 20 activities
+    return activities.slice(-20);
   } catch {
     return [];
   }

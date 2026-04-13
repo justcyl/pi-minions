@@ -175,7 +175,7 @@ describe("showMinion", () => {
     expect(text).toContain("kevin");
     expect(text).toContain("running");
     expect(text).toContain("→ $ grep -r TODO");
-    expect(text).toContain("Running for:");
+    expect(text).toContain("Running:");
   });
 
   it("shows completed minion with queue output", async () => {

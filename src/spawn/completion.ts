@@ -48,6 +48,8 @@ export async function handleCompletion(
   const status = result.exitCode === 0 ? "completed" : "failed";
   tree.updateStatus(id, status, result.exitCode, result.error);
   tree.updateUsage(id, result.usage);
+  // Persist final output in tree node so it's available after queue is cleared
+  tree.setCompletion(id, result.finalOutput);
   logger.debug("spawn:completion", "tree-updated", { id, status });
 
   queue.add({
