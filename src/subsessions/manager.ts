@@ -361,7 +361,6 @@ export class SubsessionManager {
     "find",
     "ls",
     "spawn",
-    "spawn_bg",
     "list_agents",
     "halt",
     "list_minion_types",

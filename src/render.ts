@@ -76,11 +76,13 @@ export function renderCall(args: Record<string, unknown>, theme: Theme, _ctx: un
   const firstTaskLine = task.split("\n")[0];
   const taskPreview = firstTaskLine.length > 60 ? `${firstTaskLine.slice(0, 60)}…` : firstTaskLine;
   const model = args.model ? ` [${args.model}]` : "";
+  const bgBadge = args.background ? theme.fg("dim", " [bg]") : "";
 
   const text =
     theme.fg("toolTitle", theme.bold("spawn ")) +
     theme.fg("muted", taskPreview) +
-    theme.fg("dim", model);
+    theme.fg("dim", model) +
+    bgBadge;
   return new Text(text, 0, 0);
 }
 

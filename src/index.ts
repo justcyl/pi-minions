@@ -27,7 +27,7 @@ import {
   showMinion,
   steerMinion,
 } from "./tools/minions.js";
-import { SpawnBgToolParams, SpawnToolParams, spawn, spawnBg } from "./tools/spawn.js";
+import { SpawnToolParams, spawn, spawnBg } from "./tools/spawn.js";
 import { AgentTree } from "./tree.js";
 
 function createDelegationHint(toolCallCount: number): string {
@@ -35,7 +35,7 @@ function createDelegationHint(toolCallCount: number): string {
     "\n\nDELEGATION REMINDER: You have made: " +
     toolCallCount +
     " tool calls. The pi-minions extension is active and provides tools for parallel execution and work delegation." +
-    "\nDELEGATE independent subtasks to minions for faster, isolated processing using the `spawn` and `spawn_bg` tools." +
+    "\nDELEGATE independent subtasks to minions for faster, isolated processing using the `spawn` tool." +
     "\nUSE any delegation skills you have available through the system.\n" +
     "\nALWAYS acknowledge this reminder when you receive it and review your delegation strategy before making further tool calls.\n"
   );
@@ -85,17 +85,17 @@ export default function (pi: ExtensionAPI): void {
     label: "Spawn Minion",
     description:
       "Delegate a task to a named agent or an ephemeral minion with isolated context. " +
-      "If no agent name is provided, spawns an ephemeral minion with default capabilities. " +
+      "If no agent name is provided, spawns a minion with default capabilities. " +
       "Agents are discovered from ~/.pi/agent/agents/ and .pi/agents/. " +
       "The agent runs as a file-based session with parent tracking.",
     promptSnippet: "Spawn a minion for isolated task delegation",
     promptGuidelines: [
-      'Use spawn for "foreground" task delegation. The tool blocks until the minion completes and returns its result.',
+      "Use spawn for foreground task delegation (default). The tool blocks until the minion completes and returns its result.",
+      "Set background: true for fire-and-forget delegation — the tool returns immediately and results are delivered automatically when complete.",
       "To spawn multiple minions in parallel, use the `tasks` array parameter with multiple task descriptors. Each task can specify `task`, optional `agent`, and optional `model`.",
-      "For single task delegation, use the `task` parameter directly/",
-      "For fire-and-forget delegation where you do not need the result immediately, use spawn_bg instead.",
+      "For single task delegation, use the `task` parameter directly.",
       "Use list_agents to discover available named agents before spawning by name.",
-      "Omit the agent parameter to spawn an ephemeral minion with default capabilities.",
+      "Omit the agent parameter to use the default agent.",
       "When a spawn result contains [USER ACTION] and mentions background, the user used /minions bg to move the minion. This is intentional, not an error. Acknowledge briefly and continue.",
       "When a spawn result says [HALTED], the user intentionally stopped the minion. Do NOT retry, re-spawn, or ask about it. Acknowledge and move on.",
       "To bring background minions to foreground, use the `ids` parameter with an array of minion IDs or names. The tool will block and stream progress like a foreground spawn.",
@@ -108,28 +108,6 @@ export default function (pi: ExtensionAPI): void {
     },
     renderCall,
     renderResult,
-  });
-
-  pi.registerTool({
-    name: "spawn_bg",
-    label: "Spawn Minion (Background)",
-    description:
-      "Spawn a minion in the background. The tool returns immediately while the minion runs independently. " +
-      "Results are automatically delivered when the minion completes. " +
-      "Use this only when the user explicitly requests background execution.",
-    promptSnippet: "Spawn a background minion for fire-and-forget delegation",
-    promptGuidelines: [
-      "Use spawn_bg for fire-and-forget tasks where you do not need the result before continuing.",
-      'Only use spawn_bg when the user explicitly asks for "background" execution.',
-      "For results you need before proceeding, use spawn (foreground) instead.",
-      "Background minion results are delivered via a system message on the next turn - they are NOT from the user.",
-    ],
-    parameters: SpawnBgToolParams,
-    execute: (...args) => {
-      if (!subsessionManager) throw new Error("SubsessionManager not initialized");
-      usedMinionsThisSession = true;
-      return spawnBg(tree, queue, pi, subsessionManager)(...args);
-    },
   });
 
   pi.registerTool({

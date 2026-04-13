@@ -40,6 +40,14 @@ export const SpawnToolParams = Type.Object({
     }),
   ),
   model: Type.Optional(Type.String({ description: "Override the agent's model" })),
+  // Background mode - fire and forget
+  background: Type.Optional(
+    Type.Boolean({
+      description:
+        "If true, returns immediately and delivers results automatically when complete (fire-and-forget). " +
+        "Default: false — blocks until the minion finishes and returns results inline.",
+    }),
+  ),
   // Batch mode - use tasks array
   tasks: Type.Optional(
     Type.Array(TaskDescriptor, {
@@ -551,6 +559,20 @@ export function spawn(
     if (isAttachParams(params)) {
       logger.debug("spawn:tool", "attach-mode", { count: params.ids?.length });
       return executeAttach(params.ids ?? [], _toolCallId, tree, queue, pi, signal, onUpdate, ctx);
+    }
+
+    // Background (fire-and-forget) mode for single tasks
+    if (params.background && !isBatchParams(params)) {
+      const hasTask = params.task && typeof params.task === "string" && params.task.length > 0;
+      if (!hasTask) throw new Error("'task' is required for background spawn.");
+      logger.debug("spawn:tool", "background-mode");
+      return spawnBg(tree, queue, pi, subsessionManager)(
+        _toolCallId,
+        { task: params.task!, agent: params.agent, model: params.model },
+        signal,
+        onUpdate,
+        ctx,
+      );
     }
 
     // Validate params - must have either task or tasks, not both
