@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
+import type { AgentSession, ModelRegistry } from "@mariozechner/pi-coding-agent";
+import type { Api, Model } from "@mariozechner/pi-ai";
 import {
   createAgentSession,
   createCodingTools,
@@ -97,10 +98,23 @@ export class SubsessionManager {
     });
     await loader.reload();
 
+    // Resolve model: use agent.md `model:` field if specified, fall back to parent model
+    const resolvedModel = config.model
+      ? resolveModelFromString(config.model, modelRegistry) ?? parentModel
+      : parentModel;
+
+    if (config.model && !resolveModelFromString(config.model, modelRegistry)) {
+      logger.warn("subsession", "model-not-found", {
+        requested: config.model,
+        fallback: parentModel?.id ?? "(none)",
+      });
+    }
+
     // Create the agent session
     const { session } = await createAgentSession({
       cwd: this.cwd,
-      model: parentModel,
+      model: resolvedModel,
+      thinkingLevel: config.thinking,
       tools: createCodingTools(this.cwd),
       customTools: options.customTools,
       sessionManager,
@@ -627,4 +641,39 @@ export class SubsessionManager {
       });
     }
   }
+}
+
+/**
+ * Resolve a model string (e.g. "claude-haiku-4-5" or "anthropic/claude-haiku-4-5")
+ * to a Model object using the registry.
+ *
+ * Lookup order:
+ * 1. Exact "provider/model-id" match
+ * 2. Bare model ID match across all available models (only if unambiguous)
+ */
+function resolveModelFromString(
+  modelString: string,
+  modelRegistry: ModelRegistry,
+): Model<Api> | undefined {
+  const available = modelRegistry.getAvailable();
+  const lower = modelString.trim().toLowerCase();
+
+  // Try "provider/model-id" format first
+  const slashIdx = lower.indexOf("/");
+  if (slashIdx !== -1) {
+    const provider = lower.slice(0, slashIdx);
+    const modelId = lower.slice(slashIdx + 1);
+    const match = available.find(
+      (m) =>
+        m.provider.toLowerCase() === provider &&
+        m.id.toLowerCase() === modelId,
+    );
+    if (match) return match;
+  }
+
+  // Fall back to bare model ID (unambiguous only)
+  const byId = available.filter((m) => m.id.toLowerCase() === lower);
+  if (byId.length === 1) return byId[0];
+
+  return undefined;
 }
