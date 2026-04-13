@@ -26,17 +26,55 @@ function reverseChangelog(content: string): string {
   return reversed.join("\n");
 }
 
-import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@mariozechner/pi-coding-agent";
 import { discoverAgents } from "../agents.js";
 import { logger } from "../logger.js";
 import type { ResultQueue } from "../queue.js";
 import type { EventBus } from "../subsessions/event-bus.js";
 import type { SubsessionManager } from "../subsessions/manager.js";
 import { showMinionObservability } from "../subsessions/observability.js";
-import { executeSteering, validateSteerTarget } from "../tools/minions.js";
+import { buildShowMinionText, executeSteering, validateSteerTarget } from "../tools/minions.js";
 import { detachMinion } from "../tools/spawn.js";
 import type { AgentTree } from "../tree.js";
 import { CHANGELOG_PATH, VERSION } from "../version.js";
+import { Key, matchesKey, Text } from "@mariozechner/pi-tui";
+
+/** Show a static details panel for a completed minion. q/esc to close. */
+async function showCompletedMinionDetails(
+  ctx: ExtensionCommandContext,
+  text: string,
+): Promise<void> {
+  const WIDGET_KEY = "minion-static-details";
+  return new Promise((resolve) => {
+    let unsubscribeInput: (() => void) | null = null;
+    const close = () => {
+      unsubscribeInput?.();
+      unsubscribeInput = null;
+      ctx.ui.setWidget(WIDGET_KEY, undefined);
+      resolve();
+    };
+    ctx.ui.setWidget(
+      WIDGET_KEY,
+      (_tui: unknown, theme: Theme) => {
+        const width = process.stdout.columns || 80;
+        const header = theme.fg("dim", "q/esc:close");
+        const sep = theme.fg("dim", "─".repeat(Math.min(width, 80)));
+        const body = text
+          .split("\n")
+          .map((l) => theme.fg("text", l))
+          .join("\n");
+        return new Text(`${header}\n${sep}\n${body}`, 0, 0);
+      },
+      { placement: "aboveEditor" },
+    );
+    unsubscribeInput = ctx.ui.onTerminalInput((data: string) => {
+      if (data === "q" || data === "Q" || matchesKey(data, Key.escape)) {
+        close();
+      }
+      return { consume: true };
+    });
+  });
+}
 
 type ParsedArgs =
   | { action: "list" }
@@ -277,7 +315,19 @@ export function createMinionsHandler(
         return;
       }
 
-      await showMinionWithCycling(ctx, tree, eventBus, node.id);
+      // Running minion → live observability widget
+      if (node.status === "running") {
+        await showMinionWithCycling(ctx, tree, eventBus, node.id);
+        return;
+      }
+
+      // Completed/failed/aborted → static details panel with full output
+      const text = buildShowMinionText(tree, _queue, node.id);
+      if (text) {
+        await showCompletedMinionDetails(ctx, text);
+      } else {
+        ctx.ui.notify(`No details available for: ${parsed.target}`, "info");
+      }
       return;
     }
 
