@@ -76,10 +76,14 @@ export async function executeSteering(
 // list_minions
 
 export const ListMinionsParams = Type.Object(
-  {},
+  {
+    target: Type.Optional(
+      Type.String({ description: "Minion ID or name to inspect in detail. Omit to list all minions." }),
+    ),
+  },
   {
     description:
-      "List all running and completed (pending delivery) minions. No parameters required.",
+      "List all running and completed minions. Optionally pass a target ID or name to see detailed status and full output.",
   },
 );
 export type ListMinionsParams = Static<typeof ListMinionsParams>;
@@ -104,11 +108,21 @@ export interface PendingMinionInfo {
 export function listMinions(tree: AgentTree, queue: ResultQueue) {
   return async function execute(
     _toolCallId: string,
-    _params: ListMinionsParams,
+    params: ListMinionsParams,
     _signal: AbortSignal | undefined,
     _onUpdate: unknown,
     _ctx: ExtensionContext,
-  ): Promise<AgentToolResult<{ running: MinionInfo[]; pending: PendingMinionInfo[] }>> {
+  ): Promise<AgentToolResult<unknown>> {
+    // Detail mode: show a specific minion (replaces show_minion)
+    if (params.target) {
+      const text = buildShowMinionText(tree, queue, params.target);
+      if (text === null) {
+        throw new Error(`Minion not found: ${params.target}`);
+      }
+      return { content: [{ type: "text", text }], details: undefined };
+    }
+
+    // List mode: show all running + pending
     const running: MinionInfo[] = tree.getRunning().map((n) => ({
       id: n.id,
       name: n.name,

@@ -22,9 +22,7 @@ import { ListAgentsParams, listAgents } from "./tools/list-agents.js";
 import {
   ListMinionsParams,
   listMinions,
-  ShowMinionParams,
   SteerMinionParams,
-  showMinion,
   steerMinion,
 } from "./tools/minions.js";
 import { SpawnToolParams, spawn, spawnBg } from "./tools/spawn.js";
@@ -131,34 +129,19 @@ export default function (pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
-    name: "list_minion_types",
-    label: "List Minion Types",
-    description: "List available agent types that can be spawned as minions.",
-    promptSnippet: "List available minion types",
-    parameters: ListAgentsParams,
-    execute: listAgents(),
-  });
-
-  pi.registerTool({
     name: "list_minions",
     label: "List Minions",
     description:
-      "List all running and completed (pending delivery) minions in the current session.",
+      "List all running and completed (pending delivery) minions in the current session. " +
+      "Pass a target ID or name to see detailed status, activity log, and full output of a specific minion.",
     promptSnippet: "List all running and recently completed minions",
     promptGuidelines: [
       "Use list_minions to check what minions are currently running before spawning new ones.",
       "Completed minions appear under 'pending' until their result is consumed by the next turn.",
+      "Use list_minions with target to inspect a specific minion's full output, session path, and activity log.",
     ],
     parameters: ListMinionsParams,
     execute: (...args) => listMinions(tree, queue)(...args),
-  });
-
-  pi.registerTool({
-    name: "show_minion",
-    label: "Show Minion",
-    description: "Show detailed status, activity, and output of a minion by ID or name.",
-    parameters: ShowMinionParams,
-    execute: (...args) => showMinion(tree, queue)(...args),
   });
 
   // Register custom message renderers

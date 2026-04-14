@@ -363,8 +363,7 @@ export class SubsessionManager {
     "spawn",
     "list_agents",
     "halt",
-    "list_minion_types",
-    "show_minion",
+    "list_minions",
     "steer_minion",
   ]);
 
